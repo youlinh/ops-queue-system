@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
-@RestControllerAdvice
+@RestControllerAdvice(assignableTypes = TaskController.class)
 public class TaskExceptionHandler {
     @ExceptionHandler({
             InvalidTaskRequestException.class,
@@ -33,6 +33,11 @@ public class TaskExceptionHandler {
                 HttpStatus.UNPROCESSABLE_ENTITY,
                 "NEXT_DAY_DUTY_ROSTER_MISSING",
                 exception.getMessage());
+    }
+
+    @ExceptionHandler(StaleDutyRosterException.class)
+    ResponseEntity<ErrorResponse> staleRoster(StaleDutyRosterException exception) {
+        return error(HttpStatus.CONFLICT, "DUTY_ROSTER_STALE", exception.getMessage());
     }
 
     @ExceptionHandler(NoTaskAssigneeException.class)

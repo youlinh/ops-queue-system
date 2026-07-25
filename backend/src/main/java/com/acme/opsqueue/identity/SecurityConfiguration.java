@@ -150,8 +150,11 @@ public class SecurityConfiguration {
                     && currentUser.mustChangePassword()
                     && request.getRequestURI().startsWith("/api/")
                     && !isPasswordChangeExempt(request.getRequestURI())) {
-                response.sendError(
-                        HttpServletResponse.SC_FORBIDDEN, "Password change required");
+                writeJsonError(
+                        response,
+                        HttpServletResponse.SC_FORBIDDEN,
+                        "PASSWORD_CHANGE_REQUIRED",
+                        "Password change is required");
                 return;
             }
             filterChain.doFilter(request, response);

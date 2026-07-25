@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -137,6 +138,15 @@ class IdentityApiTest extends MySqlIntegrationTest {
         Cookie session = result.getResponse().getCookie("OPS_SESSION");
         assertThat(session).isNotNull();
         assertThat(session.getAttribute("SameSite")).isEqualTo("Strict");
+    }
+
+    @Test
+    void invalidLoginRequestDoesNotUseTaskValidationErrorContract() throws Exception {
+        mvc.perform(post("/api/auth/login")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"username\":\"\",\"password\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(""));
     }
 
     @Test

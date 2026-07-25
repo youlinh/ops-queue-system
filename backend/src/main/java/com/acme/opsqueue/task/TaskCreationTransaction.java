@@ -69,6 +69,10 @@ public class TaskCreationTransaction {
         Set<UUID> activeOperatorIds = activeOperators.stream()
                 .map(UserAccount::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!activeOperatorIds.contains(duty.secondLineId())
+                || !activeOperatorIds.contains(duty.thirdLineId())) {
+            throw new StaleDutyRosterException(operationDate);
+        }
 
         MetricState metricState = loadMetricState(operationDate);
         List<CandidateMetric> metrics = buildMetrics(

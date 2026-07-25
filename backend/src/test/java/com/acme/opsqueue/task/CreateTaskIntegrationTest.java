@@ -19,8 +19,10 @@ import com.acme.opsqueue.roster.DutyRoster;
 import com.acme.opsqueue.roster.DutyRosterRepository;
 import com.acme.opsqueue.scheduling.AssignmentRule;
 import com.acme.opsqueue.support.MySqlIntegrationTest;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -39,6 +41,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -51,6 +57,7 @@ import org.springframework.test.web.servlet.MockMvc;
         properties = "task.creation.integration-test-context=true")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Import(CreateTaskIntegrationTest.FixedClockConfiguration.class)
 class CreateTaskIntegrationTest extends MySqlIntegrationTest {
     private static final Instant SUBMITTED_AT = Instant.parse("2026-07-25T01:00:00Z");
     private static final Instant DAY_START = Instant.parse("2026-07-25T02:00:00Z");
@@ -231,6 +238,47 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
     }
 
     @Test
+    void fairAllocationReloadsMetricsAndExcludesTomorrowDutyBeforePersisting() {
+        UserAccount bravo = account("task-bravo", Set.of(RoleName.OPERATOR));
+        UserAccount charlie = account("task-charlie", Set.of(RoleName.OPERATOR));
+        UserAccount delta = account("task-delta", Set.of(RoleName.OPERATOR));
+        rosters.saveAndFlush(DutyRoster.of(OPERATION_DATE, second.id(), third.id()));
+        rosters.saveAndFlush(DutyRoster.of(
+                OPERATION_DATE.plusDays(1), alpha.id(), bravo.id()));
+        markUnavailable(second);
+        markUnavailable(third);
+        markUnavailable(delta);
+
+        seedCompletedTask("FAIR-ALPHA", alpha, 10, "2026-07-25T00:10:00Z");
+        seedCompletedTask("FAIR-BRAVO-1", bravo, 20, "2026-07-25T00:20:00Z");
+        seedCompletedTask("FAIR-BRAVO-2", bravo, 20, "2026-07-25T00:30:00Z");
+        seedCompletedTask("FAIR-CHARLIE", charlie, 60, "2026-07-24T23:00:00Z");
+
+        CreatedTask result = service.create(afterHoursCommand(), creator.id(), SUBMITTED_AT);
+
+        assertThat(result.assignmentRule()).isEqualTo(AssignmentRule.FAIR);
+        assertThat(result.assigneeId()).isEqualTo(charlie.id());
+        assertThat(jdbc.queryForObject(
+                "SELECT BIN_TO_UUID(current_assignee_id) FROM tasks WHERE id = UUID_TO_BIN(?)",
+                String.class,
+                result.id().toString())).isEqualToIgnoringCase(charlie.id().toString());
+        assertThat(jdbc.queryForObject(
+                "SELECT assignment_rule FROM assignment_histories WHERE task_id = UUID_TO_BIN(?)",
+                String.class,
+                result.id().toString())).isEqualTo("FAIR");
+        assertThat(jdbc.queryForObject(
+                "SELECT candidate_snapshot FROM assignment_histories WHERE task_id = UUID_TO_BIN(?)",
+                String.class,
+                result.id().toString()))
+                .contains(
+                        charlie.id().toString(),
+                        "\"dailyTaskCount\": 1",
+                        "\"monthlyActualMinutes\": 60",
+                        "\"lastAssignedAt\": \"2026-07-24T23:00:00Z\"")
+                .doesNotContain(alpha.id().toString(), bravo.id().toString());
+    }
+
+    @Test
     void twentyConcurrentCreatesAllocateAnExactGapFreeTicketRange() throws Exception {
         rosters.saveAndFlush(DutyRoster.of(OPERATION_DATE, second.id(), third.id()));
         CountDownLatch start = new CountDownLatch(1);
@@ -298,12 +346,53 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
                         .contentType(APPLICATION_JSON)
                         .content(requestJson(alpha.id())))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.ticketNumber").value("OPS-20260725-0001"))
                 .andExpect(jsonPath("$.assigneeId").value(second.id().toString()))
                 .andExpect(jsonPath("$.assignmentRule").value("DAY_SECOND"));
 
         assertThat(jdbc.queryForObject(
                 "SELECT BIN_TO_UUID(creator_id) FROM tasks",
                 String.class)).isEqualToIgnoringCase(creator.id().toString());
+    }
+
+    @Test
+    void forcedPasswordChangeReturnsStableJsonWithoutCreatingTask() throws Exception {
+        rosters.saveAndFlush(DutyRoster.of(OPERATION_DATE, second.id(), third.id()));
+        CurrentUser forcedChangePrincipal = new CurrentUser(
+                creator.id(),
+                creator.username(),
+                creator.displayName(),
+                Set.of(RoleName.DEVELOPER),
+                true);
+
+        mvc.perform(post("/api/tasks")
+                        .with(csrf())
+                        .with(authentication(authenticationFor(forcedChangePrincipal)))
+                        .contentType(APPLICATION_JSON)
+                        .content(requestJson(alpha.id())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"))
+                .andExpect(jsonPath("$.message").value("Password change is required"));
+
+        assertNoAllocationSideEffects();
+    }
+
+    @Test
+    void disabledDutyUserInRosterReturnsStableConflictAndRollsBack() throws Exception {
+        rosters.saveAndFlush(DutyRoster.of(OPERATION_DATE, second.id(), third.id()));
+        second.disable();
+        users.saveAndFlush(second);
+        CurrentUser developerPrincipal = currentUser(creator, RoleName.DEVELOPER);
+
+        mvc.perform(post("/api/tasks")
+                        .with(csrf())
+                        .with(authentication(authenticationFor(developerPrincipal)))
+                        .contentType(APPLICATION_JSON)
+                        .content(requestJson(alpha.id())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUTY_ROSTER_STALE"));
+
+        assertNoAllocationSideEffects();
     }
 
     @Test
@@ -375,10 +464,60 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
                 java.sql.Timestamp.from(SUBMITTED_AT));
     }
 
+    private void seedCompletedTask(
+            String ticketNumber,
+            UserAccount assignee,
+            int actualMinutes,
+            String assignedAt) {
+        UUID taskId = UUID.randomUUID();
+        Instant actualStart = Instant.parse("2026-07-25T04:00:00Z");
+        Instant actualEnd = actualStart.plusSeconds(actualMinutes * 60L);
+        jdbc.update("""
+                INSERT INTO tasks (
+                    id, ticket_number, category, system_name, estimated_minutes,
+                    process_number, operation_date, operation_start_at, operation_end_at,
+                    creator_id, current_assignee_id, status, auto_assignment_rule,
+                    auto_assignment_explanation, version, actual_start_at, actual_end_at,
+                    created_at, updated_at)
+                VALUES (
+                    UUID_TO_BIN(?), ?, 'DATA_MAINTENANCE', 'Fair metric seed', 30,
+                    ?, ?, ?, ?, UUID_TO_BIN(?), UUID_TO_BIN(?), 'COMPLETED', 'FAIR',
+                    'Seed task for fair-allocation metric coverage', 0, ?, ?, ?, ?)
+                """,
+                taskId.toString(),
+                ticketNumber,
+                ticketNumber,
+                OPERATION_DATE,
+                java.sql.Timestamp.from(DAY_START),
+                java.sql.Timestamp.from(DAY_END),
+                creator.id().toString(),
+                assignee.id().toString(),
+                java.sql.Timestamp.from(actualStart),
+                java.sql.Timestamp.from(actualEnd),
+                java.sql.Timestamp.from(SUBMITTED_AT),
+                java.sql.Timestamp.from(SUBMITTED_AT));
+        jdbc.update("""
+                INSERT INTO assignment_histories (
+                    id, task_id, assignment_type, old_assignee_id, new_assignee_id,
+                    assignment_rule, reason, candidate_snapshot, actor_id, assigned_at)
+                VALUES (
+                    UUID_TO_BIN(?), UUID_TO_BIN(?), 'AUTO', NULL, UUID_TO_BIN(?), 'FAIR',
+                    'Seed assignment timestamp for fair-allocation metric coverage',
+                    CAST('[]' AS JSON), UUID_TO_BIN(?), ?)
+                """,
+                UUID.randomUUID().toString(),
+                taskId.toString(),
+                assignee.id().toString(),
+                creator.id().toString(),
+                java.sql.Timestamp.valueOf(java.time.LocalDateTime.ofInstant(
+                        Instant.parse(assignedAt), ZoneOffset.UTC)));
+    }
+
     private void assertNoAllocationSideEffects() {
         assertThat(count("tasks")).isZero();
         assertThat(count("assignment_histories")).isZero();
         assertThat(count("daily_ticket_sequences")).isZero();
+        assertThat(count("schedule_date_locks")).isZero();
     }
 
     private int count(String table) {
@@ -397,5 +536,14 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
                   "creatorId": "%s"
                 }
                 """.formatted(spoofedCreator);
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FixedClockConfiguration {
+        @Bean
+        @Primary
+        Clock fixedTaskCreationClock() {
+            return Clock.fixed(SUBMITTED_AT, ZoneOffset.UTC);
+        }
     }
 }
