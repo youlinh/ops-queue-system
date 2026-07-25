@@ -131,6 +131,62 @@ class IdentityServiceConcurrencyTest {
     }
 
     @Test
+    void pendingCredentialChecksDoNotExpireUntilTheyFinish() throws Exception {
+        UserAccountRepository users = mock(UserAccountRepository.class);
+        PasswordEncoder passwords = mock(PasswordEncoder.class);
+        UserAccount account = UserAccount.create(
+                "stalled-account",
+                "Stalled Account",
+                "stored-hash",
+                Set.of(RoleName.DEVELOPER),
+                false);
+        when(users.findByUsername("stalled-account")).thenReturn(Optional.of(account));
+        CountDownLatch allCredentialChecksStarted = new CountDownLatch(5);
+        CountDownLatch releaseCredentialChecks = new CountDownLatch(1);
+        when(passwords.matches("wrong-password", "stored-hash")).thenAnswer(invocation -> {
+            allCredentialChecksStarted.countDown();
+            if (!releaseCredentialChecks.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Credential checks were not released");
+            }
+            return false;
+        });
+        MutableClock clock = new MutableClock(Instant.parse("2026-07-25T08:00:00Z"));
+        IdentityService identities = new IdentityService(users, passwords, clock);
+        List<Future<?>> pending = new ArrayList<>();
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int request = 0; request < 5; request++) {
+                pending.add(executor.submit(() -> assertRejected(
+                        identities, "stalled-account", "198.51.100.91")));
+            }
+            assertThat(allCredentialChecksStarted.await(10, TimeUnit.SECONDS)).isTrue();
+
+            clock.advance(Duration.ofMinutes(16));
+            assertThatThrownBy(() -> identities.authenticate(
+                            "stalled-account",
+                            "wrong-password",
+                            "198.51.100.91"))
+                    .isInstanceOf(IdentityService.LoginRateLimitedException.class);
+
+            releaseCredentialChecks.countDown();
+            for (Future<?> result : pending) {
+                result.get(10, TimeUnit.SECONDS);
+            }
+
+            assertThatThrownBy(() -> identities.authenticate(
+                            "stalled-account",
+                            "wrong-password",
+                            "198.51.100.91"))
+                    .isInstanceOf(IdentityService.LoginRateLimitedException.class);
+
+            clock.advance(Duration.ofMinutes(16));
+            assertRejected(identities, "stalled-account", "198.51.100.91");
+        } finally {
+            releaseCredentialChecks.countDown();
+        }
+    }
+
+    @Test
     void fiftyConcurrentFailuresReserveOnlyFiveCredentialChecks() throws Exception {
         UserAccountRepository users = mock(UserAccountRepository.class);
         PasswordEncoder passwords = mock(PasswordEncoder.class);

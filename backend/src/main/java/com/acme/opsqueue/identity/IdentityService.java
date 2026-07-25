@@ -232,7 +232,7 @@ public class IdentityService {
                     return null;
                 }
 
-                Attempt attempt = new Attempt(username, sourceIp, now);
+                Attempt attempt = new Attempt(username, sourceIp);
                 usernames.put(username, usernameAttempts);
                 sourceIps.put(sourceIp, sourceIpAttempts);
                 usernameAttempts.addLast(attempt);
@@ -243,7 +243,7 @@ public class IdentityService {
 
         void failure(Attempt attempt) {
             withLocks(attempt.username, attempt.sourceIp, () -> {
-                attempt.failed = true;
+                attempt.failedAt = clock.instant();
                 return null;
             });
         }
@@ -253,7 +253,8 @@ public class IdentityService {
                 Deque<Attempt> usernameAttempts = usernames.get(attempt.username);
                 if (usernameAttempts != null) {
                     usernameAttempts.removeIf(
-                            candidate -> candidate == attempt || candidate.failed);
+                            candidate -> candidate == attempt
+                                    || candidate.failedAt != null);
                     if (usernameAttempts.isEmpty()) {
                         usernames.remove(attempt.username, usernameAttempts);
                     }
@@ -295,7 +296,8 @@ public class IdentityService {
             if (attempts == null) {
                 return new ArrayDeque<>();
             }
-            attempts.removeIf(attempt -> attempt.createdAt.isBefore(cutoff));
+            attempts.removeIf(attempt -> attempt.failedAt != null
+                    && attempt.failedAt.isBefore(cutoff));
             if (attempts.isEmpty()) {
                 attemptsByKey.remove(key, attempts);
                 return new ArrayDeque<>();
@@ -356,7 +358,8 @@ public class IdentityService {
                 ConcurrentMap<String, Deque<Attempt>> attemptsByKey,
                 Instant cutoff) {
             attemptsByKey.forEach((key, attempts) -> {
-                attempts.removeIf(attempt -> attempt.createdAt.isBefore(cutoff));
+                attempts.removeIf(attempt -> attempt.failedAt != null
+                        && attempt.failedAt.isBefore(cutoff));
                 if (attempts.isEmpty()) {
                     attemptsByKey.remove(key, attempts);
                 }
@@ -401,13 +404,11 @@ public class IdentityService {
         static final class Attempt {
             private final String username;
             private final String sourceIp;
-            private final Instant createdAt;
-            private boolean failed;
+            private Instant failedAt;
 
-            private Attempt(String username, String sourceIp, Instant createdAt) {
+            private Attempt(String username, String sourceIp) {
                 this.username = username;
                 this.sourceIp = sourceIp;
-                this.createdAt = createdAt;
             }
         }
     }
