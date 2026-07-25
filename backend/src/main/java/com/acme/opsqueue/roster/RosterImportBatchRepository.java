@@ -18,5 +18,8 @@ public interface RosterImportBatchRepository extends JpaRepository<RosterImportB
     @Query("select batch from RosterImportBatch batch left join fetch batch.rows where batch.id = :id")
     Optional<RosterImportBatch> findByIdWithRows(@Param("id") UUID id);
 
+    @Query("select batch from RosterImportBatch batch left join fetch batch.errors where batch.id = :id")
+    Optional<RosterImportBatch> findByIdWithErrors(@Param("id") UUID id);
+
     Page<RosterImportBatch> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

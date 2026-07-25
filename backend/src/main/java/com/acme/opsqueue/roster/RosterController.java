@@ -13,6 +13,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,6 +45,9 @@ public class RosterController {
     @PostMapping(value = "/imports/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public RosterImportPreview preview(@RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal CurrentUser currentUser) throws IOException {
+        if (file.getSize() > 1_000_000) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "上传文件超过安全限制");
+        }
         return rosterImports.preview(file.getOriginalFilename(), file.getBytes(), currentUser.id());
     }
 

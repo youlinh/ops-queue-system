@@ -74,7 +74,7 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
                 new RosterImportError(5, "二线管理员账号不存在或已停用"),
                 new RosterImportError(6, "二线管理员账号不存在或已停用"),
                 new RosterImportError(7, "二线管理员账号不具有运维管理员角色"));
-        assertThat(batches.count()).isZero();
+        assertThat(batches.count()).isEqualTo(1);
     }
 
     @Test
@@ -91,6 +91,34 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
         assertThat(batch.rows()).hasSize(2);
         assertThat(batch.rows()).extracting(RosterImportRow::dutyDate)
                 .containsExactly(LocalDate.parse("2026-07-25"), LocalDate.parse("2026-07-26"));
+    }
+
+    @Test
+    void previewAcceptsRealExcelNumericDateAndRejectsDatabaseDateUnderflow() {
+        assertThat(service.preview("roster.xlsx", RosterWorkbookFixture.workbookWithNumericDate(
+                LocalDate.of(2026, 7, 25)), leaderId).valid()).isTrue();
+
+        RosterImportPreview underflow = service.preview("roster.xlsx", workbook(List.<String[]>of(
+                new String[] {"0001-01-01", "ops1", "ops2"})), leaderId);
+        assertThat(underflow.valid()).isFalse();
+        assertThat(underflow.errors()).containsExactly(
+                new RosterImportError(2, "值班日期不能为空或格式无效"));
+    }
+
+    @Test
+    void previewAuditsStructuralFailuresWithoutStagingRows() {
+        RosterImportPreview preview = service.preview("roster.xlsx",
+                RosterWorkbookFixture.headerOnlyOrExtraColumn(true), leaderId);
+
+        assertThat(preview.valid()).isFalse();
+        UUID failedId = batches.findAllByOrderByCreatedAtDesc(
+                org.springframework.data.domain.PageRequest.of(0, 1)).getContent().getFirst().id();
+        RosterImportBatch failed = batches.findByIdWithRows(failedId).orElseThrow();
+        assertThat(failed.status()).isEqualTo(RosterImportBatch.Status.FAILED);
+        assertThat(failed.fileSha256()).matches("[0-9a-f]{64}");
+        assertThat(failed.rows()).isEmpty();
+        assertThat(batches.findByIdWithErrors(failedId).orElseThrow().errors())
+                .extracting(RosterImportErrorRow::message).containsExactly("Excel 模板必须恰好包含三列表头");
     }
 
     @Test

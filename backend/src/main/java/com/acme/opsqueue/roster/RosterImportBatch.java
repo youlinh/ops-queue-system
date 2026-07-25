@@ -16,7 +16,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "roster_import_batches")
 public class RosterImportBatch {
-    public enum Status { VALIDATED, IMPORTED }
+    public enum Status { VALIDATED, IMPORTED, FAILED }
 
     @Id
     @Column(columnDefinition = "BINARY(16)")
@@ -38,8 +38,12 @@ public class RosterImportBatch {
     private UUID importedByUserId;
     @Column(name = "imported_at")
     private Instant importedAt;
+    @Column(name = "covered_dates", nullable = false, length = 4096)
+    private String coveredDates;
     @OneToMany(mappedBy = "batch", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RosterImportRow> rows = new ArrayList<>();
+    @OneToMany(mappedBy = "batch", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<RosterImportErrorRow> errors = new ArrayList<>();
 
     protected RosterImportBatch() {
     }
@@ -51,6 +55,7 @@ public class RosterImportBatch {
         this.fileSha256 = fileSha256;
         this.uploadedByUserId = uploadedByUserId;
         this.createdAt = Instant.now();
+        this.coveredDates = "";
     }
 
     public static RosterImportBatch validated(
@@ -58,10 +63,21 @@ public class RosterImportBatch {
         return new RosterImportBatch(originalFilename, fileSha256, uploadedByUserId);
     }
 
+    public static RosterImportBatch failed(String originalFilename, String fileSha256,
+            UUID uploadedByUserId, int rowCount, String coveredDates, List<RosterImportError> errors) {
+        RosterImportBatch batch = new RosterImportBatch(originalFilename, fileSha256, uploadedByUserId);
+        batch.status = Status.FAILED;
+        batch.rowCount = rowCount;
+        batch.coveredDates = coveredDates;
+        errors.forEach(error -> batch.errors.add(new RosterImportErrorRow(batch, error.rowNumber(), error.message())));
+        return batch;
+    }
+
     public void addRow(int sourceRowNumber, java.time.LocalDate dutyDate,
             UUID secondLineUserId, UUID thirdLineUserId) {
         rows.add(new RosterImportRow(this, sourceRowNumber, dutyDate, secondLineUserId, thirdLineUserId));
         rowCount = rows.size();
+        coveredDates = rows.stream().map(row -> row.dutyDate().toString()).sorted().collect(java.util.stream.Collectors.joining(","));
     }
 
     public void markImported(UUID confirmerId) {
@@ -83,4 +99,6 @@ public class RosterImportBatch {
     public UUID importedByUserId() { return importedByUserId; }
     public Instant importedAt() { return importedAt; }
     public List<RosterImportRow> rows() { return List.copyOf(rows); }
+    public String coveredDates() { return coveredDates; }
+    List<RosterImportErrorRow> errors() { return List.copyOf(errors); }
 }
