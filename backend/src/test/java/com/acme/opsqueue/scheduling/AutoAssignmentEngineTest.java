@@ -7,7 +7,10 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -23,6 +26,8 @@ class AutoAssignmentEngineTest {
     private static final UUID BETA = UUID.fromString("00000000-0000-0000-0000-000000000040");
     private static final UUID TOMORROW_SECOND =
             UUID.fromString("00000000-0000-0000-0000-000000000050");
+    private static final UUID INELIGIBLE =
+            UUID.fromString("00000000-0000-0000-0000-000000000060");
 
     private final AutoAssignmentEngine engine = new AutoAssignmentEngine();
 
@@ -159,10 +164,19 @@ class AutoAssignmentEngineTest {
         assertThat(decision.rule()).isEqualTo(AssignmentRule.DAY_THIRD);
         assertThat(decision.assigneeId()).isEqualTo(THIRD);
         assertThat(decision.candidates())
+                .extracting(CandidateSnapshot::userId)
+                .containsExactly(SECOND, THIRD);
+        assertThat(decision.candidates())
                 .anySatisfy(snapshot -> {
                     assertThat(snapshot.userId()).isEqualTo(SECOND);
                     assertThat(snapshot.exclusionReason()).isEqualTo("OPERATION_DAY_UNAVAILABLE");
                 });
+        assertThat(decision.candidates())
+                .filteredOn(snapshot -> snapshot.userId().equals(THIRD))
+                .singleElement()
+                .extracting(CandidateSnapshot::exclusionReason)
+                .isNull();
+        assertThat(decision.explanation()).contains("second line is unavailable");
     }
 
     @Test
@@ -301,18 +315,92 @@ class AutoAssignmentEngineTest {
     }
 
     @Test
-    void inputAndDecisionCandidateCollectionsAreImmutableCopies() {
+    void rejectsMetricForDisabledOrLeaderOnlyAccountOutsideActiveOperatorSet() {
+        assertThatThrownBy(() -> inputWithActiveOperators(
+                        Set.of(SECOND, THIRD),
+                        "2026-07-25T20:00+08:00[Asia/Shanghai]",
+                        "2026-07-25T00:00:00Z",
+                        metric(SECOND, 3, 0, null),
+                        metric(THIRD, 3, 0, null),
+                        metric(INELIGIBLE, 0, 0, null)))
+                .isInstanceOf(MalformedAssignmentInputException.class)
+                .hasMessageContaining("extra")
+                .hasMessageContaining(INELIGIBLE.toString());
+    }
+
+    @Test
+    void rejectsMissingMetricForActiveOperator() {
+        assertThatThrownBy(() -> inputWithActiveOperators(
+                        Set.of(SECOND, THIRD, ALPHA),
+                        "2026-07-25T20:00+08:00[Asia/Shanghai]",
+                        "2026-07-25T00:00:00Z",
+                        metric(SECOND, 3, 0, null),
+                        metric(THIRD, 3, 0, null)))
+                .isInstanceOf(MalformedAssignmentInputException.class)
+                .hasMessageContaining("missing")
+                .hasMessageContaining(ALPHA.toString());
+    }
+
+    @Test
+    void rejectsDuplicateMetricsEvenWhenTheirDistinctIdsMatchActiveOperators() {
+        assertThatThrownBy(() -> inputWithActiveOperators(
+                        Set.of(SECOND, THIRD),
+                        "2026-07-25T20:00+08:00[Asia/Shanghai]",
+                        "2026-07-25T00:00:00Z",
+                        metric(SECOND, 3, 0, null),
+                        metric(SECOND, 3, 0, null),
+                        metric(THIRD, 3, 0, null)))
+                .isInstanceOf(MalformedAssignmentInputException.class)
+                .hasMessageContaining("duplicate")
+                .hasMessageContaining(SECOND.toString());
+    }
+
+    @Test
+    void rejectsDutyUserThatIsNotAnActiveOperator() {
+        assertThatThrownBy(() -> inputWithActiveOperators(
+                        Set.of(SECOND, ALPHA),
+                        "2026-07-25T10:00+08:00[Asia/Shanghai]",
+                        "2026-07-25T00:00:00Z",
+                        metric(SECOND, 0, 0, null),
+                        metric(ALPHA, 0, 0, null)))
+                .isInstanceOf(MalformedAssignmentInputException.class)
+                .hasMessageContaining("duty")
+                .hasMessageContaining("active operator")
+                .hasMessageContaining(THIRD.toString());
+    }
+
+    @Test
+    void rejectsOmittedDutyMetricInsteadOfTreatingDutyUserAsUnavailable() {
+        assertThatThrownBy(() -> inputWithActiveOperators(
+                        Set.of(SECOND, THIRD, ALPHA),
+                        "2026-07-25T10:00+08:00[Asia/Shanghai]",
+                        "2026-07-25T00:00:00Z",
+                        metric(THIRD, 0, 0, null),
+                        metric(ALPHA, 0, 0, null)))
+                .isInstanceOf(MalformedAssignmentInputException.class)
+                .hasMessageContaining("missing")
+                .hasMessageContaining(SECOND.toString());
+    }
+
+    @Test
+    void inputAndDecisionCollectionsAreImmutableCopies() {
         List<CandidateMetric> mutableCandidates = new ArrayList<>(List.of(
                 metric(SECOND, 0, 0, null), metric(THIRD, 0, 0, null)));
+        Set<UUID> mutableActiveOperatorIds = new HashSet<>(Set.of(SECOND, THIRD));
         AssignmentInput input = new AssignmentInput(
                 Instant.parse("2026-07-25T00:00:00Z"),
                 ZonedDateTime.parse("2026-07-25T10:00+08:00[Asia/Shanghai]"),
                 new DutyPair(SECOND, THIRD),
+                mutableActiveOperatorIds,
                 mutableCandidates);
 
         mutableCandidates.clear();
+        mutableActiveOperatorIds.clear();
         assertThat(input.candidates()).hasSize(2);
+        assertThat(input.activeOperatorIds()).containsExactlyInAnyOrder(SECOND, THIRD);
         assertThatThrownBy(() -> input.candidates().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> input.activeOperatorIds().clear())
                 .isInstanceOf(UnsupportedOperationException.class);
 
         AssignmentDecision decision = engine.assign(input);
@@ -326,6 +414,7 @@ class AutoAssignmentEngineTest {
                         Instant.parse("2026-07-25T00:00:00Z"),
                         ZonedDateTime.parse("2026-07-25T10:00Z"),
                         new DutyPair(SECOND, THIRD),
+                        Set.of(SECOND, THIRD),
                         List.of(metric(SECOND, 0, 0, null), metric(THIRD, 0, 0, null))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Asia/Shanghai");
@@ -333,10 +422,22 @@ class AutoAssignmentEngineTest {
 
     private static AssignmentInput input(
             String operationStart, String submittedAt, CandidateMetric... candidates) {
+        Set<UUID> activeOperatorIds = Set.copyOf(
+                Arrays.stream(candidates).map(CandidateMetric::userId).toList());
+        return inputWithActiveOperators(
+                activeOperatorIds, operationStart, submittedAt, candidates);
+    }
+
+    private static AssignmentInput inputWithActiveOperators(
+            Set<UUID> activeOperatorIds,
+            String operationStart,
+            String submittedAt,
+            CandidateMetric... candidates) {
         return new AssignmentInput(
                 Instant.parse(submittedAt),
                 ZonedDateTime.parse(operationStart),
                 new DutyPair(SECOND, THIRD),
+                activeOperatorIds,
                 List.of(candidates));
     }
 

@@ -156,7 +156,10 @@ public final class AutoAssignmentEngine {
     }
 
     private static AssignmentDecision fairDecision(AssignmentInput input, String explanation) {
-        List<CandidateMetric> orderedCandidates = input.candidates().stream()
+        Map<UUID, CandidateMetric> metricsByUserId = input.candidates().stream()
+                .collect(Collectors.toMap(CandidateMetric::userId, Function.identity()));
+        List<CandidateMetric> orderedCandidates = input.activeOperatorIds().stream()
+                .map(metricsByUserId::get)
                 .filter(CandidateMetric::availableOnOperationDay)
                 .filter(candidate -> !candidate.nextDayDuty())
                 .sorted(FAIR_ORDER)
