@@ -11,6 +11,7 @@ import java.time.Instant;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -20,10 +21,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/tasks")
 public class TaskController {
     private final CreateTaskService taskCreation;
+    private final TaskLifecycleService lifecycle;
     private final Clock clock;
 
-    public TaskController(CreateTaskService taskCreation, Clock clock) {
+    public TaskController(
+            CreateTaskService taskCreation,
+            TaskLifecycleService lifecycle,
+            Clock clock) {
         this.taskCreation = taskCreation;
+        this.lifecycle = lifecycle;
         this.clock = clock;
     }
 
@@ -34,6 +40,24 @@ public class TaskController {
             @Valid @RequestBody CreateTaskRequest request) {
         return taskCreation.create(
                 request.toCommand(), creator.id(), clock.instant());
+    }
+
+    @PostMapping("/{id}/call")
+    public TaskView call(
+            @PathVariable java.util.UUID id,
+            @AuthenticationPrincipal CurrentUser actor) {
+        return lifecycle.call(id, actor.id(), clock.instant());
+    }
+
+    @PostMapping("/{id}/complete")
+    public TaskView complete(
+            @PathVariable java.util.UUID id,
+            @AuthenticationPrincipal CurrentUser actor,
+            @RequestBody CompleteTaskRequest request) {
+        if (request == null || request.actualMinutes() == null) {
+            throw TaskLifecycleException.invalidDuration();
+        }
+        return lifecycle.complete(id, actor.id(), request.actualMinutes(), clock.instant());
     }
 
     public record CreateTaskRequest(
@@ -53,5 +77,8 @@ public class TaskController {
                     operationStart,
                     operationEnd);
         }
+    }
+
+    public record CompleteTaskRequest(Integer actualMinutes) {
     }
 }

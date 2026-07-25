@@ -53,6 +53,19 @@ public class TaskExceptionHandler {
                 "Task creation is temporarily unavailable");
     }
 
+    @ExceptionHandler(TaskLifecycleException.class)
+    ResponseEntity<ErrorResponse> lifecycle(TaskLifecycleException exception) {
+        return switch (exception.reason()) {
+            case NOT_FOUND -> error(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", exception.getMessage());
+            case FORBIDDEN -> error(HttpStatus.FORBIDDEN, "TASK_ASSIGNEE_REQUIRED", exception.getMessage());
+            case CONFLICT -> error(HttpStatus.CONFLICT, "TASK_LIFECYCLE_CONFLICT", exception.getMessage());
+            case INVALID_DURATION -> error(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "INVALID_ACTUAL_MINUTES",
+                    exception.getMessage());
+        };
+    }
+
     private ResponseEntity<ErrorResponse> error(
             HttpStatus status, String code, String message) {
         return ResponseEntity.status(status).body(new ErrorResponse(code, message));
