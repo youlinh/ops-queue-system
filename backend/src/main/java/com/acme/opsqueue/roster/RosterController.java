@@ -43,19 +43,15 @@ public class RosterController {
     }
 
     @PostMapping(value = "/imports/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public RosterImportPreview preview(@RequestParam("file") MultipartFile file,
+    public ResponseEntity<RosterImportPreview> preview(@RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal CurrentUser currentUser) throws IOException {
-        if (file.getSize() > 1_000_000) {
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "上传文件超过安全限制");
-        }
         RosterImportPreview preview = rosterImports.preview(
                 file.getOriginalFilename(), file.getBytes(), currentUser.id());
         if (!preview.valid()) {
             boolean limit = preview.errors().stream().anyMatch(error -> error.message().equals("上传文件超过安全限制"));
-            throw new ResponseStatusException(limit ? HttpStatus.PAYLOAD_TOO_LARGE : HttpStatus.UNPROCESSABLE_ENTITY,
-                    limit ? "上传文件超过安全限制" : "值班表校验失败");
+            return ResponseEntity.status(limit ? HttpStatus.PAYLOAD_TOO_LARGE : HttpStatus.UNPROCESSABLE_ENTITY).body(preview);
         }
-        return preview;
+        return ResponseEntity.ok(preview);
     }
 
     @PostMapping("/imports/{batchId}/confirm")

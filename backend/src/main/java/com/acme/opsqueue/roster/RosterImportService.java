@@ -41,14 +41,14 @@ public class RosterImportService {
     public RosterImportPreview preview(String originalFilename, byte[] bytes, UUID uploaderId) {
         RosterExcelParser.ParsedWorkbook parsed = parser.parse(bytes);
         if (!parsed.errors().isEmpty()) {
-            persistFailure(originalFilename, bytes, uploaderId, parsed.rows(), parsed.errors());
-            return new RosterImportPreview(null, false, parsed.errors());
+            RosterImportBatch failed = persistFailure(originalFilename, bytes, uploaderId, parsed.rows(), parsed.errors());
+            return new RosterImportPreview(failed.id(), false, parsed.errors());
         }
         Map<String, UserAccount> accounts = accountsByUsername(parsed.rows());
         List<RosterImportError> errors = validate(parsed.rows(), accounts);
         if (!errors.isEmpty()) {
-            persistFailure(originalFilename, bytes, uploaderId, parsed.rows(), errors);
-            return new RosterImportPreview(null, false, errors);
+            RosterImportBatch failed = persistFailure(originalFilename, bytes, uploaderId, parsed.rows(), errors);
+            return new RosterImportPreview(failed.id(), false, errors);
         }
         RosterImportBatch batch = RosterImportBatch.validated(
                 safeFilename(originalFilename), sha256(bytes), uploaderId);
@@ -57,16 +57,17 @@ public class RosterImportService {
                     accounts.get(normalize(row.secondLineUsername())).id(),
                     accounts.get(normalize(row.thirdLineUsername())).id());
         }
+        batch.finishStaging();
         batches.saveAndFlush(batch);
         return new RosterImportPreview(batch.id(), true, List.of());
     }
 
-    private void persistFailure(String originalFilename, byte[] bytes, UUID uploaderId,
+    private RosterImportBatch persistFailure(String originalFilename, byte[] bytes, UUID uploaderId,
             List<RosterExcelParser.ParsedRow> rows, List<RosterImportError> errors) {
         String dates = rows.stream().map(RosterExcelParser.ParsedRow::parseDate)
                 .filter(java.util.Objects::nonNull).map(LocalDate::toString).distinct().sorted()
                 .collect(java.util.stream.Collectors.joining(","));
-        batches.saveAndFlush(RosterImportBatch.failed(safeFilename(originalFilename), sha256(bytes),
+        return batches.saveAndFlush(RosterImportBatch.failed(safeFilename(originalFilename), sha256(bytes),
                 uploaderId, rows.size(), dates, errors));
     }
 

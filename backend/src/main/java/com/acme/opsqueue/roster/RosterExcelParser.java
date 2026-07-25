@@ -84,8 +84,8 @@ public class RosterExcelParser {
     }
 
     private boolean blank(Row row) { return dateBlank(row.getCell(0)) && textBlank(row.getCell(1)) && textBlank(row.getCell(2)); }
-    private boolean dateBlank(Cell cell) { return cell == null || (cell.getCellType() == CellType.STRING && cell.getStringCellValue().isEmpty()); }
-    private boolean textBlank(Cell cell) { return cell == null || (cell.getCellType() == CellType.STRING && cell.getStringCellValue().isEmpty()); }
+    private boolean dateBlank(Cell cell) { return cell == null || cell.getCellType() == CellType.BLANK || (cell.getCellType() == CellType.STRING && cell.getStringCellValue().isBlank()); }
+    private boolean textBlank(Cell cell) { return cell == null || cell.getCellType() == CellType.BLANK || (cell.getCellType() == CellType.STRING && cell.getStringCellValue().isBlank()); }
     private boolean hasFormula(Row row) { for (int i = 0; i < 3; i++) { Cell cell = row.getCell(i); if (cell != null && cell.getCellType() == CellType.FORMULA) return true; } return false; }
     private String text(Row row, int column) {
         Cell cell = row.getCell(column, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);

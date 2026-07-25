@@ -38,7 +38,7 @@ public class RosterImportBatch {
     private UUID importedByUserId;
     @Column(name = "imported_at")
     private Instant importedAt;
-    @Column(name = "covered_dates", nullable = false, length = 4096)
+    @Column(name = "covered_dates", nullable = false, columnDefinition = "MEDIUMTEXT")
     private String coveredDates;
     @OneToMany(mappedBy = "batch", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RosterImportRow> rows = new ArrayList<>();
@@ -77,7 +77,11 @@ public class RosterImportBatch {
             UUID secondLineUserId, UUID thirdLineUserId) {
         rows.add(new RosterImportRow(this, sourceRowNumber, dutyDate, secondLineUserId, thirdLineUserId));
         rowCount = rows.size();
-        coveredDates = rows.stream().map(row -> row.dutyDate().toString()).sorted().collect(java.util.stream.Collectors.joining(","));
+    }
+
+    public void finishStaging() {
+        coveredDates = rows.stream().map(row -> row.dutyDate().toString()).sorted()
+                .collect(java.util.stream.Collectors.joining(","));
     }
 
     public void markImported(UUID confirmerId) {

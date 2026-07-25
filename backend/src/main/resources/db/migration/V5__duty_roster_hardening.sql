@@ -1,5 +1,16 @@
+ALTER TABLE roster_import_batches ADD COLUMN covered_dates MEDIUMTEXT NULL;
+
+SET SESSION group_concat_max_len = 1048576;
+UPDATE roster_import_batches batch
+SET covered_dates = COALESCE((
+    SELECT GROUP_CONCAT(import_row.duty_date ORDER BY import_row.duty_date SEPARATOR ',')
+    FROM roster_import_rows import_row WHERE import_row.batch_id = batch.id
+), '');
+UPDATE roster_import_batches
+SET status = 'FAILED', imported_by_user_id = NULL, imported_at = NULL
+WHERE row_count = 0;
 ALTER TABLE roster_import_batches
-    ADD COLUMN covered_dates VARCHAR(4096) NOT NULL DEFAULT '',
+    MODIFY COLUMN covered_dates MEDIUMTEXT NOT NULL,
     ADD CONSTRAINT chk_roster_import_batch_status CHECK (status IN ('VALIDATED', 'IMPORTED', 'FAILED')),
     ADD CONSTRAINT chk_roster_import_batch_metadata CHECK (
         (status = 'IMPORTED' AND imported_by_user_id IS NOT NULL AND imported_at IS NOT NULL AND row_count > 0)
