@@ -2,6 +2,7 @@ package com.acme.opsqueue.identity;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -26,6 +27,12 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
             order by user.id
             """)
     List<UserAccount> findEnabledByRole(@Param("role") RoleName role);
+
+    List<UserAccount> findByUsernameIn(Collection<String> usernames);
+
+    @Query("select user from UserAccount user where user.id in :ids")
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    List<UserAccount> findAllByIdInForUpdate(@Param("ids") Collection<UUID> ids);
 
     @Query(
             value = """

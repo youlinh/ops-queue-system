@@ -65,6 +65,8 @@ public class SecurityConfiguration {
                         .permitAll()
                         .requestMatchers("/api/admin/**")
                         .hasRole(RoleName.LEADER.name())
+                        .requestMatchers("/api/rosters/**")
+                        .hasRole(RoleName.LEADER.name())
                         .requestMatchers("/api/**")
                         .authenticated()
                         .anyRequest()

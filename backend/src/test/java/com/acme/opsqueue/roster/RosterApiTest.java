@@ -1,0 +1,108 @@
+package com.acme.opsqueue.roster;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.acme.opsqueue.OpsQueueApplication;
+import com.acme.opsqueue.identity.RoleName;
+import com.acme.opsqueue.identity.UserAccount;
+import com.acme.opsqueue.identity.UserAccountRepository;
+import com.acme.opsqueue.support.MySqlIntegrationTest;
+import jakarta.servlet.http.Cookie;
+import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.ActiveProfiles;
+
+@SpringBootTest(classes = OpsQueueApplication.class)
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+class RosterApiTest extends MySqlIntegrationTest {
+    @Autowired
+    private MockMvc mvc;
+
+    @Autowired
+    private UserAccountRepository users;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @BeforeEach
+    void setUp() {
+        users.deleteAll();
+        createUser("leader", Set.of(RoleName.LEADER));
+        createUser("operator", Set.of(RoleName.OPERATOR));
+        createUser("ops1", Set.of(RoleName.OPERATOR));
+        createUser("ops2", Set.of(RoleName.OPERATOR));
+    }
+
+    @Test
+    void rosterManagementEndpointsAreLeaderOnly() throws Exception {
+        Cookie operator = login("operator");
+
+        mvc.perform(get("/api/rosters/template").cookie(operator))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/rosters").cookie(operator))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/rosters/imports").cookie(operator))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void leaderPreviewsThenConfirmsAndSecondConfirmationIsConflict() throws Exception {
+        Cookie leader = login("leader");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "roster.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                RosterWorkbookFixture.workbook(List.<String[]>of(
+                        new String[] {"2026-07-25", "ops1", "ops2"})));
+
+        MvcResult preview = mvc.perform(multipart("/api/rosters/imports/preview")
+                        .file(file).with(csrf()).cookie(leader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid").value(true))
+                .andExpect(jsonPath("$.batchId").isNotEmpty())
+                .andReturn();
+        String batchId = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(preview.getResponse().getContentAsString()).path("batchId").asText();
+
+        mvc.perform(post("/api/rosters/imports/{batchId}/confirm", batchId)
+                        .with(csrf()).cookie(leader))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/rosters/imports/{batchId}/confirm", batchId)
+                        .with(csrf()).cookie(leader))
+                .andExpect(status().isConflict());
+        mvc.perform(get("/api/rosters").cookie(leader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].dutyDate").value("2026-07-25"));
+    }
+
+    private UserAccount createUser(String username, Set<RoleName> roles) {
+        return users.save(UserAccount.create(
+                username,
+                username,
+                passwordEncoder.encode("Test-Password-1"),
+                roles,
+                false));
+    }
+
+    private Cookie login(String username) throws Exception {
+        return mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"username\":\"%s\",\"password\":\"Test-Password-1\"}".formatted(username)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie("OPS_SESSION");
+    }
+}
