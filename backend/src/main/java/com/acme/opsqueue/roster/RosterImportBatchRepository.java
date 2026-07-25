@@ -22,9 +22,14 @@ public interface RosterImportBatchRepository extends JpaRepository<RosterImportB
     @Query("select batch from RosterImportBatch batch left join fetch batch.errors where batch.id = :id")
     Optional<RosterImportBatch> findByIdWithErrors(@Param("id") UUID id);
 
-    Page<RosterImportBatch> findAllByOrderByCreatedAtDesc(Pageable pageable);
-
-    @Query("select error.batch.id, count(error) from RosterImportErrorRow error "
-            + "where error.batch.id in :ids group by error.batch.id")
-    List<Object[]> countErrorsByBatchId(@Param("ids") List<UUID> ids);
+    @Query(value = """
+            select new com.acme.opsqueue.roster.RosterImportBatchView(
+                batch.id, batch.status, batch.originalFilename, batch.fileSha256, batch.rowCount,
+                batch.uploadedByUserId, batch.createdAt, batch.importedByUserId, batch.importedAt, count(error))
+            from RosterImportBatch batch left join batch.errors error
+            group by batch.id, batch.status, batch.originalFilename, batch.fileSha256, batch.rowCount,
+                batch.uploadedByUserId, batch.createdAt, batch.importedByUserId, batch.importedAt
+            order by batch.createdAt desc
+            """, countQuery = "select count(batch) from RosterImportBatch batch")
+    Page<RosterImportBatchView> findHistorySummaries(Pageable pageable);
 }

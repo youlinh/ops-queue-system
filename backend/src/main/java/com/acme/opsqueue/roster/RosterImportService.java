@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -109,14 +108,7 @@ public class RosterImportService {
 
     @Transactional(readOnly = true)
     public Page<RosterImportBatchView> history(Pageable pageable) {
-        Page<RosterImportBatch> page = batches.findAllByOrderByCreatedAtDesc(pageable);
-        List<UUID> ids = page.getContent().stream().map(RosterImportBatch::id).toList();
-        Map<UUID, Long> errorCounts = new HashMap<>();
-        if (!ids.isEmpty()) {
-            batches.countErrorsByBatchId(ids).forEach(result -> errorCounts.put((UUID) result[0], (Long) result[1]));
-        }
-        return new PageImpl<>(page.getContent().stream()
-                .map(batch -> RosterImportBatchView.from(batch, errorCounts.getOrDefault(batch.id(), 0L))).toList(), pageable, page.getTotalElements());
+        return batches.findHistorySummaries(pageable);
     }
 
     @Transactional(readOnly = true)

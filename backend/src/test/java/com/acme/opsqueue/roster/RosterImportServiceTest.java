@@ -62,7 +62,7 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
 
     @Test
     void previewReturnsExactRowErrorsAndDoesNotStageAnInvalidWorkbook() {
-        RosterImportPreview preview = service.preview("roster.xlsx", workbook(List.of(
+        RosterImportPreview preview = service.preview("roster.xlsx", workbook(List.<String[]>of(
                 new String[] {"2026-07-25", "ops1", "ops1"},
                 new String[] {"2026-07-25", "ops1", "ops2"},
                 new String[] {"", "ops1", "ops2"},
@@ -99,7 +99,7 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
 
     @Test
     void previewStagesValidatedRowsWithAFileDigest() {
-        RosterImportPreview preview = service.preview("roster.xlsx", workbook(List.of(
+        RosterImportPreview preview = service.preview("roster.xlsx", workbook(List.<String[]>of(
                 new String[] {"2026-07-25", "ops1", "ops2"},
                 new String[] {"2026-07-26", "ops2", "ops3"})), leaderId);
 
@@ -139,6 +139,23 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
     }
 
     @Test
+    void historyUsesTheSummaryProjectionWithoutLoadingLargeCoveredDates() {
+        RosterImportPreview preview = service.preview("roster.xlsx", workbook(List.<String[]>of(
+                new String[] {"2026-07-25", "ops1", "ops2"})), leaderId);
+        jdbc.update("UPDATE roster_import_batches SET covered_dates = RPAD('', 200000, 'x') WHERE id = UUID_TO_BIN(?)",
+                preview.batchId().toString());
+
+        RosterImportBatchView summary = service.history(org.springframework.data.domain.PageRequest.of(0, 1))
+                .getContent().getFirst();
+
+        assertThat(summary.id()).isEqualTo(preview.batchId());
+        assertThat(summary.errorCount()).isZero();
+        assertThat(RosterImportBatchView.class.getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .doesNotContain("coveredDates", "errors");
+    }
+
+    @Test
     void previewAcceptsRealExcelNumericDateAndRejectsDatabaseDateUnderflow() {
         assertThat(service.preview("roster.xlsx", RosterWorkbookFixture.workbookWithNumericDate(
                 LocalDate.of(2026, 7, 25)), leaderId).valid()).isTrue();
@@ -156,8 +173,8 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
                 RosterWorkbookFixture.headerOnlyOrExtraColumn(true), leaderId);
 
         assertThat(preview.valid()).isFalse();
-        UUID failedId = batches.findAllByOrderByCreatedAtDesc(
-                org.springframework.data.domain.PageRequest.of(0, 1)).getContent().getFirst().id();
+        UUID failedId = service.history(org.springframework.data.domain.PageRequest.of(0, 1))
+                .getContent().getFirst().id();
         RosterImportBatch failed = batches.findByIdWithRows(failedId).orElseThrow();
         assertThat(failed.status()).isEqualTo(RosterImportBatch.Status.FAILED);
         assertThat(failed.fileSha256()).matches("[0-9a-f]{64}");

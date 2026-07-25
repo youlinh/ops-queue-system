@@ -14,9 +14,4 @@ public record RosterImportBatchView(
         UUID importedByUserId,
         Instant importedAt,
         long errorCount) {
-    static RosterImportBatchView from(RosterImportBatch batch, long errorCount) {
-        return new RosterImportBatchView(batch.id(), batch.status(), batch.originalFilename(),
-                batch.fileSha256(), batch.rowCount(), batch.uploadedByUserId(), batch.createdAt(),
-                batch.importedByUserId(), batch.importedAt(), errorCount);
-    }
 }
