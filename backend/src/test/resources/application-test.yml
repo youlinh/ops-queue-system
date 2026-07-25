@@ -4,3 +4,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+
+JWT_SIGNING_KEY: test-profile-signing-key-with-at-least-32-bytes
+JWT_COOKIE_SECURE: false
+BOOTSTRAP_LEADER_USERNAME: test-bootstrap-leader
+BOOTSTRAP_LEADER_DISPLAY_NAME: Test Bootstrap Leader
+BOOTSTRAP_LEADER_PASSWORD: Test-Bootstrap-Password-1
