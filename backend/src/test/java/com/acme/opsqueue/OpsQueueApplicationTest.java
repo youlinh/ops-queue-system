@@ -31,9 +31,7 @@ class OpsQueueApplicationTest extends MySqlIntegrationTest {
                 restTemplate.getForEntity("/actuator/health", JsonNode.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody())
-                .isNotNull()
-                .extracting(body -> body.path("status").asText())
-                .isEqualTo("UP");
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().path("status").asText()).isEqualTo("UP");
     }
 }
