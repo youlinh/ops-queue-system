@@ -1,6 +1,7 @@
 package com.acme.opsqueue.roster;
 
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -21,7 +22,9 @@ public interface RosterImportBatchRepository extends JpaRepository<RosterImportB
     @Query("select batch from RosterImportBatch batch left join fetch batch.errors where batch.id = :id")
     Optional<RosterImportBatch> findByIdWithErrors(@Param("id") UUID id);
 
-    @Query(value = "select distinct batch from RosterImportBatch batch left join fetch batch.errors order by batch.createdAt desc",
-            countQuery = "select count(batch) from RosterImportBatch batch")
     Page<RosterImportBatch> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    @Query("select error.batch.id, count(error) from RosterImportErrorRow error "
+            + "where error.batch.id in :ids group by error.batch.id")
+    List<Object[]> countErrorsByBatchId(@Param("ids") List<UUID> ids);
 }

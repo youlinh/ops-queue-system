@@ -53,11 +53,11 @@ public class RosterExcelParser {
                 for (int index = 1; index <= sheet.getLastRowNum(); index++) {
                     Row row = sheet.getRow(index);
                     if (row == null) continue;
-                    if (row.getLastCellNum() > 3) { errors.add(new RosterImportError(index + 1, "数据行不能包含第四列")); continue; }
-                    if (blank(row)) continue;
+                    if (blank(row) && row.getLastCellNum() <= 3) continue;
                     observedRows++;
                     LocalDate date = date(row.getCell(0, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL));
                     if (date != null) coveredDates.add(date.toString());
+                    if (row.getLastCellNum() > 3) { errors.add(new RosterImportError(index + 1, "数据行不能包含第四列")); continue; }
                     if (hasFormula(row)) { errors.add(new RosterImportError(index + 1, "不支持公式单元格")); continue; }
                     String second = text(row, 1);
                     String third = text(row, 2);

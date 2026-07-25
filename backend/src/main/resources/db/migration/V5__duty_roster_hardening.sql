@@ -1,6 +1,6 @@
 ALTER TABLE roster_import_batches ADD COLUMN covered_dates MEDIUMTEXT NULL;
 
-SET SESSION group_concat_max_len = 1048576;
+SET SESSION group_concat_max_len = 12582912;
 UPDATE roster_import_batches batch
 SET covered_dates = COALESCE((
     SELECT GROUP_CONCAT(import_row.duty_date ORDER BY import_row.duty_date SEPARATOR ',')

@@ -13,12 +13,10 @@ public record RosterImportBatchView(
         Instant createdAt,
         UUID importedByUserId,
         Instant importedAt,
-        String coveredDates,
-        java.util.List<RosterImportError> errors) {
-    static RosterImportBatchView from(RosterImportBatch batch) {
+        long errorCount) {
+    static RosterImportBatchView from(RosterImportBatch batch, long errorCount) {
         return new RosterImportBatchView(batch.id(), batch.status(), batch.originalFilename(),
                 batch.fileSha256(), batch.rowCount(), batch.uploadedByUserId(), batch.createdAt(),
-                batch.importedByUserId(), batch.importedAt(), batch.coveredDates(),
-                batch.errors().stream().map(error -> new RosterImportError(error.sourceRowNumber(), error.message())).toList());
+                batch.importedByUserId(), batch.importedAt(), errorCount);
     }
 }

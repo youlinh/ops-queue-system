@@ -74,6 +74,11 @@ public class RosterController {
         return rosterImports.history(pageable);
     }
 
+    @GetMapping("/imports/{batchId}")
+    public RosterImportBatchDetailView importDetail(@PathVariable UUID batchId) {
+        return rosterImports.importDetail(batchId);
+    }
+
     @ExceptionHandler(RosterImportService.ImportConflictException.class)
     public ResponseEntity<String> importConflict(RosterImportService.ImportConflictException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(exception.getMessage());

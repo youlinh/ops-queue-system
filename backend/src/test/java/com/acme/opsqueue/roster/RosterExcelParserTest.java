@@ -38,8 +38,16 @@ class RosterExcelParserTest {
         assertThat(parser.parse(workbook(book -> book.createSheet("extra"))).errors()).isNotEmpty();
         assertThat(parser.parse(workbook(book -> book.getSheetAt(0).getRow(0).getCell(0).setCellValue(" 值班日期"))).errors()).isNotEmpty();
         assertThat(parser.parse(workbook(book -> { })).errors()).isNotEmpty();
-        assertThat(parser.parse(workbook(book -> book.getSheetAt(0).createRow(1).createCell(3).setCellValue("unexpected"))).errors())
-                .contains(new RosterImportError(2, "数据行不能包含第四列"));
+        var fourthColumn = parser.parse(workbook(book -> {
+            var row = book.getSheetAt(0).createRow(1);
+            row.createCell(0).setCellValue("2026-07-25");
+            row.createCell(1).setCellValue("ops1");
+            row.createCell(2).setCellValue("ops2");
+            row.createCell(3).setCellValue("unexpected");
+        }));
+        assertThat(fourthColumn.errors()).contains(new RosterImportError(2, "数据行不能包含第四列"));
+        assertThat(fourthColumn.observedRowCount()).isEqualTo(1);
+        assertThat(fourthColumn.coveredDates()).isEqualTo("2026-07-25");
     }
 
     @Test

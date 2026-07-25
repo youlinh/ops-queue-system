@@ -90,9 +90,11 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
                 .singleElement().satisfies(view -> {
                     assertThat(view.status()).isEqualTo(RosterImportBatch.Status.FAILED);
                     assertThat(view.rowCount()).isEqualTo(6);
-                    assertThat(view.coveredDates()).isEqualTo(failed.coveredDates());
-                    assertThat(view.errors()).hasSize(6);
+                    assertThat(view.errorCount()).isEqualTo(6);
                 });
+        RosterImportBatchDetailView detail = service.importDetail(preview.batchId());
+        assertThat(detail.coveredDates()).isEqualTo(failed.coveredDates());
+        assertThat(detail.errors()).hasSize(6);
     }
 
     @Test

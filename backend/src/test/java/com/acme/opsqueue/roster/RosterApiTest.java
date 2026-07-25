@@ -62,6 +62,8 @@ class RosterApiTest extends MySqlIntegrationTest {
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/rosters/imports").cookie(operator))
                 .andExpect(status().isForbidden());
+        mvc.perform(get("/api/rosters/imports/{batchId}", java.util.UUID.randomUUID()).cookie(operator))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -96,10 +98,20 @@ class RosterApiTest extends MySqlIntegrationTest {
     @Test
     void previewUsesStable413ForUploadLimitsAnd422ForInvalidWorkbookShape() throws Exception {
         Cookie leader = login("leader");
-        mvc.perform(multipart("/api/rosters/imports/preview").file(new MockMultipartFile(
+        MvcResult limit = mvc.perform(multipart("/api/rosters/imports/preview").file(new MockMultipartFile(
                         "file", "large.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         new byte[1_000_001])).with(csrf()).cookie(leader))
-                .andExpect(status().isPayloadTooLarge());
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.valid").value(false))
+                .andExpect(jsonPath("$.batchId").isNotEmpty())
+                .andExpect(jsonPath("$.errors[0].message").value("上传文件超过安全限制"))
+                .andReturn();
+        String limitBatchId = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(limit.getResponse().getContentAsString()).path("batchId").asText();
+        mvc.perform(get("/api/rosters/imports/{batchId}", limitBatchId).cookie(leader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.errors[0].message").value("上传文件超过安全限制"));
         mvc.perform(multipart("/api/rosters/imports/preview").file(new MockMultipartFile(
                         "file", "invalid.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         RosterWorkbookFixture.headerOnlyOrExtraColumn(true))).with(csrf()).cookie(leader))

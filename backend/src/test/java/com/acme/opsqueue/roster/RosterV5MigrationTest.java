@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
@@ -13,11 +14,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class RosterV5MigrationTest {
+    private static final int BACKFILL_ROWS = 95_326;
     @Container
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
             .withDatabaseName("roster_upgrade")
             .withUsername("roster_upgrade")
-            .withPassword("test-password");
+            .withPassword("test-password")
+            .withCommand("--max_allowed_packet=16M");
 
     @Test
     void upgradesARealV4SchemaAndBackfillsThenHardensRosterBatches() throws Exception {
@@ -25,7 +28,6 @@ class RosterV5MigrationTest {
         UUID userId = UUID.randomUUID();
         UUID emptyBatchId = UUID.randomUUID();
         UUID populatedBatchId = UUID.randomUUID();
-        UUID rowId = UUID.randomUUID();
         try (var connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())) {
             try (var user = connection.prepareStatement("""
                     INSERT INTO users (id, username, display_name, password_hash, must_change_password, enabled, created_at, updated_at, version)
@@ -35,26 +37,9 @@ class RosterV5MigrationTest {
                 user.executeUpdate();
             }
             insertBatch(connection, emptyBatchId, userId, "VALIDATED", 0);
-            insertBatch(connection, populatedBatchId, userId, "VALIDATED", 1);
-            try (var row = connection.prepareStatement("""
-                    INSERT INTO roster_import_rows (id, batch_id, source_row_number, duty_date, second_line_user_id, third_line_user_id)
-                    VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), 2, '2026-07-25', UUID_TO_BIN(?), UUID_TO_BIN(?))
-                    """)) {
-                row.setString(1, rowId.toString());
-                row.setString(2, populatedBatchId.toString());
-                row.setString(3, userId.toString());
-                // Use a second distinct referenced user to satisfy the V5 row check.
-                UUID secondUser = UUID.randomUUID();
-                try (var second = connection.prepareStatement("""
-                        INSERT INTO users (id, username, display_name, password_hash, must_change_password, enabled, created_at, updated_at, version)
-                        VALUES (UUID_TO_BIN(?), 'operator2', 'Operator 2', 'hash', false, true, NOW(6), NOW(6), 0)
-                        """)) {
-                    second.setString(1, secondUser.toString());
-                    second.executeUpdate();
-                }
-                row.setString(4, secondUser.toString());
-                row.executeUpdate();
-            }
+            insertBatch(connection, populatedBatchId, userId, "VALIDATED", BACKFILL_ROWS);
+            UUID secondUser = insertSecondUser(connection);
+            insertLegacyRows(connection, populatedBatchId, userId, secondUser);
         }
 
         migrateTo("5");
@@ -77,8 +62,46 @@ class RosterV5MigrationTest {
             try (ResultSet result = statement.executeQuery()) {
                 assertThat(result.next()).isTrue();
                 assertThat(result.getString("status")).isEqualTo("VALIDATED");
-                assertThat(result.getString("covered_dates")).isEqualTo("2026-07-25");
+                String dates = result.getString("covered_dates");
+                assertThat(dates.length()).isEqualTo(BACKFILL_ROWS * 11 - 1);
+                assertThat(dates.length()).isGreaterThan(1_048_576);
+                assertThat(dates).startsWith("1000-01-01").endsWith(LocalDate.of(1000, 1, 1).plusDays(BACKFILL_ROWS - 1).toString());
             }
+        }
+    }
+
+    private UUID insertSecondUser(java.sql.Connection connection) throws Exception {
+        UUID secondUser = UUID.randomUUID();
+        try (var second = connection.prepareStatement("""
+                INSERT INTO users (id, username, display_name, password_hash, must_change_password, enabled, created_at, updated_at, version)
+                VALUES (UUID_TO_BIN(?), 'operator2', 'Operator 2', 'hash', false, true, NOW(6), NOW(6), 0)
+                """)) {
+            second.setString(1, secondUser.toString());
+            second.executeUpdate();
+        }
+        return secondUser;
+    }
+
+    private void insertLegacyRows(java.sql.Connection connection, UUID batchId, UUID firstUser, UUID secondUser) throws Exception {
+        connection.setAutoCommit(false);
+        try (var row = connection.prepareStatement("""
+                INSERT INTO roster_import_rows (id, batch_id, source_row_number, duty_date, second_line_user_id, third_line_user_id)
+                VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), ?, ?, UUID_TO_BIN(?), UUID_TO_BIN(?))
+                """)) {
+            for (int index = 0; index < BACKFILL_ROWS; index++) {
+                row.setString(1, UUID.randomUUID().toString());
+                row.setString(2, batchId.toString());
+                row.setInt(3, index + 2);
+                row.setString(4, LocalDate.of(1000, 1, 1).plusDays(index).toString());
+                row.setString(5, firstUser.toString());
+                row.setString(6, secondUser.toString());
+                row.addBatch();
+                if ((index + 1) % 1_000 == 0) row.executeBatch();
+            }
+            row.executeBatch();
+            connection.commit();
+        } finally {
+            connection.setAutoCommit(true);
         }
     }
 
