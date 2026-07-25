@@ -1,5 +1,6 @@
 package com.acme.opsqueue.identity;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -9,8 +10,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,11 +25,20 @@ import org.springframework.web.server.ResponseStatusException;
 public class IdentityService {
     private final UserAccountRepository users;
     private final PasswordEncoder passwordEncoder;
-    private final LoginThrottle throttle = new LoginThrottle();
+    private final LoginThrottle throttle;
 
+    @Autowired
     public IdentityService(UserAccountRepository users, PasswordEncoder passwordEncoder) {
+        this(users, passwordEncoder, Clock.systemUTC());
+    }
+
+    IdentityService(
+            UserAccountRepository users,
+            PasswordEncoder passwordEncoder,
+            Clock clock) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
+        this.throttle = new LoginThrottle(clock);
     }
 
     @Transactional
@@ -54,7 +66,7 @@ public class IdentityService {
         } catch (LoginRejectedException exception) {
             throw exception;
         } catch (RuntimeException exception) {
-            throttle.failure(attempt);
+            throttle.cancel(attempt);
             throw exception;
         }
     }
@@ -105,6 +117,14 @@ public class IdentityService {
 
     void afterUsernameAvailabilityCheck(String normalizedUsername) {
         // Test seam for deterministically exercising the database uniqueness race.
+    }
+
+    int throttleUsernameKeyCount() {
+        return throttle.usernameKeyCount();
+    }
+
+    int throttleSourceIpKeyCount() {
+        return throttle.sourceIpKeyCount();
     }
 
     @Transactional
@@ -175,24 +195,40 @@ public class IdentityService {
     private static final class LoginThrottle {
         private static final int MAX_FAILURES = 5;
         private static final Duration WINDOW = Duration.ofMinutes(15);
+        private static final Duration CLEANUP_INTERVAL = Duration.ofMinutes(1);
         private static final int LOCK_STRIPES = 256;
+        private static final int MAX_KEYS_PER_DIMENSION = 4_096;
 
         private final ConcurrentMap<String, Deque<Attempt>> usernames =
                 new ConcurrentHashMap<>();
         private final ConcurrentMap<String, Deque<Attempt>> sourceIps =
                 new ConcurrentHashMap<>();
         private final ReentrantLock[] locks = createLocks();
+        private final ReentrantLock maintenanceLock = new ReentrantLock();
+        private final Clock clock;
+        private final AtomicLong nextCleanupAtMillis;
+
+        private LoginThrottle(Clock clock) {
+            this.clock = clock;
+            this.nextCleanupAtMillis =
+                    new AtomicLong(clock.millis() + CLEANUP_INTERVAL.toMillis());
+        }
 
         Attempt reserve(String username, String sourceIp) {
+            maybeCleanup();
             return withLocks(username, sourceIp, () -> {
-                Instant now = Instant.now();
+                Instant now = clock.instant();
                 Instant cutoff = now.minus(WINDOW);
                 Deque<Attempt> usernameAttempts =
                         activeAttempts(usernames, username, cutoff);
                 Deque<Attempt> sourceIpAttempts =
                         activeAttempts(sourceIps, sourceIp, cutoff);
                 if (usernameAttempts.size() >= MAX_FAILURES
-                        || sourceIpAttempts.size() >= MAX_FAILURES) {
+                        || sourceIpAttempts.size() >= MAX_FAILURES
+                        || (!usernames.containsKey(username)
+                                && usernames.size() >= MAX_KEYS_PER_DIMENSION)
+                        || (!sourceIps.containsKey(sourceIp)
+                                && sourceIps.size() >= MAX_KEYS_PER_DIMENSION)) {
                     return null;
                 }
 
@@ -234,6 +270,22 @@ public class IdentityService {
             });
         }
 
+        void cancel(Attempt attempt) {
+            withLocks(attempt.username, attempt.sourceIp, () -> {
+                removeAttempt(usernames, attempt.username, attempt);
+                removeAttempt(sourceIps, attempt.sourceIp, attempt);
+                return null;
+            });
+        }
+
+        int usernameKeyCount() {
+            return keyCount(usernames);
+        }
+
+        int sourceIpKeyCount() {
+            return keyCount(sourceIps);
+        }
+
         private Deque<Attempt> activeAttempts(
                 ConcurrentMap<String, Deque<Attempt>> attemptsByKey,
                 String key,
@@ -259,20 +311,78 @@ public class IdentityService {
             ReentrantLock first = locks[firstStripe];
             ReentrantLock second = locks[secondStripe];
 
-            first.lock();
+            maintenanceLock.lock();
             try {
-                if (firstStripe != secondStripe) {
-                    second.lock();
-                }
+                first.lock();
                 try {
-                    return action.get();
-                } finally {
                     if (firstStripe != secondStripe) {
-                        second.unlock();
+                        second.lock();
                     }
+                    try {
+                        return action.get();
+                    } finally {
+                        if (firstStripe != secondStripe) {
+                            second.unlock();
+                        }
+                    }
+                } finally {
+                    first.unlock();
                 }
             } finally {
-                first.unlock();
+                maintenanceLock.unlock();
+            }
+        }
+
+        private void maybeCleanup() {
+            long now = clock.millis();
+            long scheduled = nextCleanupAtMillis.get();
+            if (now < scheduled
+                    || !nextCleanupAtMillis.compareAndSet(
+                            scheduled, now + CLEANUP_INTERVAL.toMillis())) {
+                return;
+            }
+
+            maintenanceLock.lock();
+            try {
+                Instant cutoff = clock.instant().minus(WINDOW);
+                expireAll(usernames, cutoff);
+                expireAll(sourceIps, cutoff);
+            } finally {
+                maintenanceLock.unlock();
+            }
+        }
+
+        private void expireAll(
+                ConcurrentMap<String, Deque<Attempt>> attemptsByKey,
+                Instant cutoff) {
+            attemptsByKey.forEach((key, attempts) -> {
+                attempts.removeIf(attempt -> attempt.createdAt.isBefore(cutoff));
+                if (attempts.isEmpty()) {
+                    attemptsByKey.remove(key, attempts);
+                }
+            });
+        }
+
+        private void removeAttempt(
+                ConcurrentMap<String, Deque<Attempt>> attemptsByKey,
+                String key,
+                Attempt attempt) {
+            Deque<Attempt> attempts = attemptsByKey.get(key);
+            if (attempts == null) {
+                return;
+            }
+            attempts.remove(attempt);
+            if (attempts.isEmpty()) {
+                attemptsByKey.remove(key, attempts);
+            }
+        }
+
+        private int keyCount(ConcurrentMap<String, Deque<Attempt>> attemptsByKey) {
+            maintenanceLock.lock();
+            try {
+                return attemptsByKey.size();
+            } finally {
+                maintenanceLock.unlock();
             }
         }
 
