@@ -37,10 +37,14 @@ class RosterApiTest extends MySqlIntegrationTest {
     private UserAccountRepository users;
 
     @Autowired
+    private RosterImportBatchRepository batches;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
+        batches.deleteAll();
         users.deleteAll();
         createUser("leader", Set.of(RoleName.LEADER));
         createUser("operator", Set.of(RoleName.OPERATOR));
@@ -87,6 +91,19 @@ class RosterApiTest extends MySqlIntegrationTest {
         mvc.perform(get("/api/rosters").cookie(leader))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].dutyDate").value("2026-07-25"));
+    }
+
+    @Test
+    void previewUsesStable413ForUploadLimitsAnd422ForInvalidWorkbookShape() throws Exception {
+        Cookie leader = login("leader");
+        mvc.perform(multipart("/api/rosters/imports/preview").file(new MockMultipartFile(
+                        "file", "large.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        new byte[1_000_001])).with(csrf()).cookie(leader))
+                .andExpect(status().isPayloadTooLarge());
+        mvc.perform(multipart("/api/rosters/imports/preview").file(new MockMultipartFile(
+                        "file", "invalid.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        RosterWorkbookFixture.headerOnlyOrExtraColumn(true))).with(csrf()).cookie(leader))
+                .andExpect(status().is(422));
     }
 
     private UserAccount createUser(String username, Set<RoleName> roles) {
