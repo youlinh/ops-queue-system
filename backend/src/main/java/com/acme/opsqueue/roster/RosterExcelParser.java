@@ -3,9 +3,10 @@ package com.acme.opsqueue.roster;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.apache.poi.ss.usermodel.Cell;
@@ -21,14 +22,16 @@ public class RosterExcelParser {
     private static final int MAX_COMPRESSED_BYTES = 1_000_000;
     private static final int MAX_ZIP_ENTRIES = 100;
     private static final long MAX_UNCOMPRESSED_BYTES = 4_000_000L;
-    private static final long MAX_ENTRY_BYTES = 1_000_000L;
+    private static final long MAX_ENTRY_BYTES = 4_000_000L;
     private static final int MAX_ROWS = 10_000;
     private static final int MAX_STRING_LENGTH = 512;
     private static final LocalDate MYSQL_MIN_DATE = LocalDate.of(1000, 1, 1);
     private static final LocalDate MYSQL_MAX_DATE = LocalDate.of(9999, 12, 31);
 
     ParsedWorkbook parse(byte[] bytes) {
-        if (bytes == null || bytes.length == 0 || bytes.length > MAX_COMPRESSED_BYTES) return ParsedWorkbook.invalid("上传文件超过安全限制");
+        if (bytes == null || bytes.length == 0 || bytes.length > MAX_COMPRESSED_BYTES) {
+            return ParsedWorkbook.invalid("上传文件超过安全限制");
+        }
         try {
             checkZipBudget(bytes);
             try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
@@ -45,20 +48,24 @@ public class RosterExcelParser {
                 }
                 List<ParsedRow> rows = new ArrayList<>();
                 List<RosterImportError> errors = new ArrayList<>();
+                Set<String> coveredDates = new TreeSet<>();
+                int observedRows = 0;
                 for (int index = 1; index <= sheet.getLastRowNum(); index++) {
                     Row row = sheet.getRow(index);
                     if (row == null) continue;
                     if (row.getLastCellNum() > 3) { errors.add(new RosterImportError(index + 1, "数据行不能包含第四列")); continue; }
                     if (blank(row)) continue;
+                    observedRows++;
+                    LocalDate date = date(row.getCell(0, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL));
+                    if (date != null) coveredDates.add(date.toString());
                     if (hasFormula(row)) { errors.add(new RosterImportError(index + 1, "不支持公式单元格")); continue; }
                     String second = text(row, 1);
                     String third = text(row, 2);
                     if (second == null || third == null) { errors.add(new RosterImportError(index + 1, "管理员账号格式无效")); continue; }
-                    LocalDate date = date(row.getCell(0, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL));
                     rows.add(new ParsedRow(index + 1, date, second, third));
                 }
                 if (rows.isEmpty() && errors.isEmpty()) return ParsedWorkbook.invalid("Excel 文件至少需要一条非空数据");
-                return new ParsedWorkbook(rows, errors);
+                return new ParsedWorkbook(rows, errors, observedRows, String.join(",", coveredDates));
             }
         } catch (LimitException exception) {
             return ParsedWorkbook.invalid("上传文件超过安全限制");
@@ -68,15 +75,18 @@ public class RosterExcelParser {
     }
 
     private void checkZipBudget(byte[] bytes) throws IOException, LimitException {
-        int entries = 0; long total = 0;
+        int entries = 0;
+        long total = 0;
         try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(bytes))) {
             ZipEntry entry;
             byte[] buffer = new byte[8192];
             while ((entry = zip.getNextEntry()) != null) {
                 if (++entries > MAX_ZIP_ENTRIES) throw new LimitException();
-                long entryTotal = 0; int read;
+                long entryTotal = 0;
+                int read;
                 while ((read = zip.read(buffer)) != -1) {
-                    entryTotal += read; total += read;
+                    entryTotal += read;
+                    total += read;
                     if (entryTotal > MAX_ENTRY_BYTES || total > MAX_UNCOMPRESSED_BYTES) throw new LimitException();
                 }
             }
@@ -94,14 +104,18 @@ public class RosterExcelParser {
     private LocalDate date(Cell cell) {
         try {
             if (cell == null) return null;
-            LocalDate date = cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)
+            LocalDate parsed = cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)
                     ? cell.getLocalDateTimeCellValue().toLocalDate()
                     : cell.getCellType() == CellType.STRING ? LocalDate.parse(cell.getStringCellValue()) : null;
-            return date != null && !date.isBefore(MYSQL_MIN_DATE) && !date.isAfter(MYSQL_MAX_DATE) ? date : null;
+            return parsed != null && !parsed.isBefore(MYSQL_MIN_DATE) && !parsed.isAfter(MYSQL_MAX_DATE) ? parsed : null;
         } catch (RuntimeException exception) { return null; }
     }
 
-    record ParsedWorkbook(List<ParsedRow> rows, List<RosterImportError> errors) { static ParsedWorkbook invalid(String message) { return new ParsedWorkbook(List.of(), List.of(new RosterImportError(1, message))); } }
+    record ParsedWorkbook(List<ParsedRow> rows, List<RosterImportError> errors, int observedRowCount, String coveredDates) {
+        static ParsedWorkbook invalid(String message) {
+            return new ParsedWorkbook(List.of(), List.of(new RosterImportError(1, message)), 0, "");
+        }
+    }
     record ParsedRow(int sourceRowNumber, LocalDate date, String secondLineUsername, String thirdLineUsername) { LocalDate parseDate() { return date; } }
     private static class LimitException extends Exception { }
 }

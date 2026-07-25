@@ -7,6 +7,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,6 +44,7 @@ public class RosterImportBatch {
     @OneToMany(mappedBy = "batch", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RosterImportRow> rows = new ArrayList<>();
     @OneToMany(mappedBy = "batch", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sourceRowNumber ASC")
     private List<RosterImportErrorRow> errors = new ArrayList<>();
 
     protected RosterImportBatch() {

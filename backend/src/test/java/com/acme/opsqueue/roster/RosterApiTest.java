@@ -103,7 +103,11 @@ class RosterApiTest extends MySqlIntegrationTest {
         mvc.perform(multipart("/api/rosters/imports/preview").file(new MockMultipartFile(
                         "file", "invalid.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         RosterWorkbookFixture.headerOnlyOrExtraColumn(true))).with(csrf()).cookie(leader))
-                .andExpect(status().is(422));
+                .andExpect(status().is(422))
+                .andExpect(jsonPath("$.valid").value(false))
+                .andExpect(jsonPath("$.batchId").isNotEmpty())
+                .andExpect(jsonPath("$.errors[0].rowNumber").value(1))
+                .andExpect(jsonPath("$.errors[0].message").isNotEmpty());
     }
 
     private UserAccount createUser(String username, Set<RoleName> roles) {

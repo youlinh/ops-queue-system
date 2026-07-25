@@ -1,6 +1,7 @@
 package com.acme.opsqueue.roster;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.acme.opsqueue.OpsQueueApplication;
 import com.acme.opsqueue.identity.RoleName;
@@ -20,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest(classes = OpsQueueApplication.class)
 @ActiveProfiles("test")
@@ -38,6 +40,9 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private UUID leaderId;
 
@@ -66,7 +71,7 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
                 new String[] {"2026-07-30", "leader", "ops2"})), leaderId);
 
         assertThat(preview.valid()).isFalse();
-        assertThat(preview.batchId()).isNull();
+        assertThat(preview.batchId()).isNotNull();
         assertThat(preview.errors()).containsExactly(
                 new RosterImportError(2, "二线管理员账号和三线管理员账号不能相同"),
                 new RosterImportError(3, "值班日期在文件中重复"),
@@ -75,6 +80,19 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
                 new RosterImportError(6, "二线管理员账号不存在或已停用"),
                 new RosterImportError(7, "二线管理员账号不具有运维管理员角色"));
         assertThat(batches.count()).isEqualTo(1);
+        RosterImportBatch failed = batches.findByIdWithErrors(preview.batchId()).orElseThrow();
+        assertThat(failed.status()).isEqualTo(RosterImportBatch.Status.FAILED);
+        assertThat(failed.rowCount()).isEqualTo(6);
+        assertThat(failed.coveredDates()).isEqualTo("2026-07-25,2026-07-28,2026-07-29,2026-07-30");
+        assertThat(failed.errors()).extracting(RosterImportErrorRow::sourceRowNumber)
+                .containsExactly(2, 3, 4, 5, 6, 7);
+        assertThat(service.history(org.springframework.data.domain.PageRequest.of(0, 10)).getContent())
+                .singleElement().satisfies(view -> {
+                    assertThat(view.status()).isEqualTo(RosterImportBatch.Status.FAILED);
+                    assertThat(view.rowCount()).isEqualTo(6);
+                    assertThat(view.coveredDates()).isEqualTo(failed.coveredDates());
+                    assertThat(view.errors()).hasSize(6);
+                });
     }
 
     @Test
@@ -91,6 +109,31 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
         assertThat(batch.rows()).hasSize(2);
         assertThat(batch.rows()).extracting(RosterImportRow::dutyDate)
                 .containsExactly(LocalDate.parse("2026-07-25"), LocalDate.parse("2026-07-26"));
+    }
+
+    @Test
+    void storesCoveredDatesBeyondTheOldVarcharBoundary() {
+        List<String[]> rows = java.util.stream.IntStream.range(0, 373)
+                .mapToObj(offset -> new String[] {LocalDate.of(2026, 1, 1).plusDays(offset).toString(), "ops1", "ops2"})
+                .toList();
+
+        RosterImportPreview preview = service.preview("roster.xlsx", workbook(rows), leaderId);
+
+        assertThat(preview.valid()).isTrue();
+        String dates = batches.findById(preview.batchId()).orElseThrow().coveredDates();
+        assertThat(dates.split(",")).hasSize(373);
+        assertThat(dates).startsWith("2026-01-01").endsWith("2027-01-08");
+    }
+
+    @Test
+    void databaseCheckRejectsAnInvalidBatchStatus() {
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO roster_import_batches
+                    (id, status, original_filename, file_sha256, row_count, uploaded_by_user_id, created_at, covered_dates)
+                VALUES (UUID_TO_BIN(?), 'INVALID', 'roster.xlsx', RPAD('', 64, '0'), 0, UUID_TO_BIN(?), NOW(6), '')
+                """, UUID.randomUUID().toString(), leaderId.toString()))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Check constraint");
     }
 
     @Test

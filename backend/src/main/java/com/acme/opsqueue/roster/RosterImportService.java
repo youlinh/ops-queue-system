@@ -41,13 +41,13 @@ public class RosterImportService {
     public RosterImportPreview preview(String originalFilename, byte[] bytes, UUID uploaderId) {
         RosterExcelParser.ParsedWorkbook parsed = parser.parse(bytes);
         if (!parsed.errors().isEmpty()) {
-            RosterImportBatch failed = persistFailure(originalFilename, bytes, uploaderId, parsed.rows(), parsed.errors());
+            RosterImportBatch failed = persistFailure(originalFilename, bytes, uploaderId, parsed.observedRowCount(), parsed.coveredDates(), parsed.errors());
             return new RosterImportPreview(failed.id(), false, parsed.errors());
         }
         Map<String, UserAccount> accounts = accountsByUsername(parsed.rows());
         List<RosterImportError> errors = validate(parsed.rows(), accounts);
         if (!errors.isEmpty()) {
-            RosterImportBatch failed = persistFailure(originalFilename, bytes, uploaderId, parsed.rows(), errors);
+            RosterImportBatch failed = persistFailure(originalFilename, bytes, uploaderId, parsed.observedRowCount(), parsed.coveredDates(), errors);
             return new RosterImportPreview(failed.id(), false, errors);
         }
         RosterImportBatch batch = RosterImportBatch.validated(
@@ -63,12 +63,9 @@ public class RosterImportService {
     }
 
     private RosterImportBatch persistFailure(String originalFilename, byte[] bytes, UUID uploaderId,
-            List<RosterExcelParser.ParsedRow> rows, List<RosterImportError> errors) {
-        String dates = rows.stream().map(RosterExcelParser.ParsedRow::parseDate)
-                .filter(java.util.Objects::nonNull).map(LocalDate::toString).distinct().sorted()
-                .collect(java.util.stream.Collectors.joining(","));
+            int observedRows, String dates, List<RosterImportError> errors) {
         return batches.saveAndFlush(RosterImportBatch.failed(safeFilename(originalFilename), sha256(bytes),
-                uploaderId, rows.size(), dates, errors));
+                uploaderId, observedRows, dates, errors));
     }
 
     @Transactional
