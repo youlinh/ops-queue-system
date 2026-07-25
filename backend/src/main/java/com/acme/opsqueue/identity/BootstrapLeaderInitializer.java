@@ -34,7 +34,8 @@ public class BootstrapLeaderInitializer implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (users.existsByRolesContaining(RoleName.LEADER)) {
+        users.lockEnabledLeaderGuard();
+        if (users.existsByEnabledRole(RoleName.LEADER)) {
             return;
         }
 
@@ -48,8 +49,16 @@ public class BootstrapLeaderInitializer implements ApplicationRunner {
                             + String.join(", ", missing));
         }
 
+        String normalizedUsername = UserAccount.normalizeUsername(username);
+        if (users.findByUsername(normalizedUsername).isPresent()) {
+            throw new IllegalStateException(
+                    "No enabled leader exists and bootstrap username '"
+                            + normalizedUsername
+                            + "' is already assigned");
+        }
+
         users.save(UserAccount.create(
-                username,
+                normalizedUsername,
                 displayName,
                 passwordEncoder.encode(password),
                 Set.of(RoleName.LEADER),

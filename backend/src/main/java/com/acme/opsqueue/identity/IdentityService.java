@@ -4,11 +4,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,12 +82,21 @@ public class IdentityService {
                 passwordEncoder.encode(initialPassword),
                 roles,
                 true);
-        return users.save(account);
+        try {
+            return users.saveAndFlush(account);
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Username already exists", exception);
+        }
     }
 
     @Transactional
     public void disable(UUID userId) {
-        requireAccount(userId).disable();
+        List<UserAccount> enabledLeaders =
+                lockAndFindEnabledLeaders();
+        UserAccount account = requireAccount(userId);
+        rejectRemovingLastLeader(account, enabledLeaders, false);
+        account.disable();
     }
 
     @Transactional
@@ -95,7 +106,11 @@ public class IdentityService {
 
     @Transactional
     public UserAccount replaceRoles(UUID userId, Set<RoleName> roles) {
+        List<UserAccount> enabledLeaders =
+                lockAndFindEnabledLeaders();
         UserAccount account = requireAccount(userId);
+        rejectRemovingLastLeader(
+                account, enabledLeaders, roles.contains(RoleName.LEADER));
         account.replaceRoles(roles);
         return account;
     }
@@ -113,6 +128,25 @@ public class IdentityService {
         return users.findById(id)
                 .orElseThrow(() ->
                         new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found"));
+    }
+
+    private void rejectRemovingLastLeader(
+            UserAccount account,
+            List<UserAccount> enabledLeaders,
+            boolean remainsLeader) {
+        if (account.enabled()
+                && account.roles().contains(RoleName.LEADER)
+                && !remainsLeader
+                && enabledLeaders.size() == 1
+                && enabledLeaders.getFirst().id().equals(account.id())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "At least one enabled leader is required");
+        }
+    }
+
+    private List<UserAccount> lockAndFindEnabledLeaders() {
+        users.lockEnabledLeaderGuard();
+        return users.findEnabledByRole(RoleName.LEADER);
     }
 
     static final class LoginRejectedException extends RuntimeException {
@@ -144,7 +178,6 @@ public class IdentityService {
 
         void success(String username, String sourceIp) {
             usernames.remove(username);
-            sourceIps.remove(sourceIp);
         }
 
         private int countSince(

@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.Set;
 import java.util.UUID;
@@ -26,14 +27,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class IdentityController {
     private final IdentityService identities;
     private final JwtCookieService jwtCookies;
+    private final ClientIpResolver clientIps;
     private final CookieCsrfTokenRepository csrfTokens;
 
     public IdentityController(
             IdentityService identities,
             JwtCookieService jwtCookies,
+            ClientIpResolver clientIps,
             CookieCsrfTokenRepository csrfTokens) {
         this.identities = identities;
         this.jwtCookies = jwtCookies;
+        this.clientIps = clientIps;
         this.csrfTokens = csrfTokens;
     }
 
@@ -44,7 +48,7 @@ public class IdentityController {
             HttpServletResponse servletResponse) {
         try {
             CurrentUser currentUser = identities.authenticate(
-                    request.username(), request.password(), servletRequest.getRemoteAddr());
+                    request.username(), request.password(), clientIps.resolve(servletRequest));
             jwtCookies.issue(servletResponse, currentUser.id());
             return ResponseEntity.ok(currentUser);
         } catch (IdentityService.LoginRateLimitedException exception) {
@@ -67,8 +71,9 @@ public class IdentityController {
 
     @GetMapping("/auth/csrf")
     public CsrfResponse csrf(
-            HttpServletRequest request, HttpServletResponse response) {
-        CsrfToken token = csrfTokens.generateToken(request);
+            CsrfToken token,
+            HttpServletRequest request,
+            HttpServletResponse response) {
         csrfTokens.saveToken(token, request, response);
         return new CsrfResponse(token.getToken());
     }
@@ -116,26 +121,26 @@ public class IdentityController {
 
     public record LoginRequest(
             @NotBlank @Size(max = 64) String username,
-            @NotBlank @Size(max = 256) String password) {
+            @NotBlank @Utf8ByteLength(max = 72) String password) {
     }
 
     public record ChangePasswordRequest(
-            @NotBlank @Size(max = 256) String currentPassword,
-            @NotBlank @Size(min = 12, max = 256) String newPassword) {
+            @NotBlank @Utf8ByteLength(max = 72) String currentPassword,
+            @NotBlank @Size(min = 12) @Utf8ByteLength(max = 72) String newPassword) {
     }
 
     public record CreateUserRequest(
             @NotBlank @Size(max = 64) String username,
             @NotBlank @Size(max = 128) String displayName,
-            @NotBlank @Size(min = 12, max = 256) String initialPassword,
-            @NotEmpty Set<RoleName> roles) {
+            @NotBlank @Size(min = 12) @Utf8ByteLength(max = 72) String initialPassword,
+            @NotEmpty Set<@NotNull RoleName> roles) {
     }
 
     public record ResetPasswordRequest(
-            @NotBlank @Size(min = 12, max = 256) String initialPassword) {
+            @NotBlank @Size(min = 12) @Utf8ByteLength(max = 72) String initialPassword) {
     }
 
-    public record ReplaceRolesRequest(@NotEmpty Set<RoleName> roles) {
+    public record ReplaceRolesRequest(@NotEmpty Set<@NotNull RoleName> roles) {
     }
 
     public record CsrfResponse(String token) {

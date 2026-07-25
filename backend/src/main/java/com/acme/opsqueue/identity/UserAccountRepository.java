@@ -1,5 +1,6 @@
 package com.acme.opsqueue.identity;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,7 +15,25 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     @Query("""
             select case when count(user) > 0 then true else false end
             from UserAccount user join user.roles role
-            where role = :role
+            where user.enabled = true and role = :role
             """)
-    boolean existsByRolesContaining(@Param("role") RoleName role);
+    boolean existsByEnabledRole(@Param("role") RoleName role);
+
+    @Query("""
+            select distinct user
+            from UserAccount user join user.roles role
+            where user.enabled = true and role = :role
+            order by user.id
+            """)
+    List<UserAccount> findEnabledByRole(@Param("role") RoleName role);
+
+    @Query(
+            value = """
+                    select guard_name
+                    from identity_guards
+                    where guard_name = 'enabled-leader'
+                    for update
+                    """,
+            nativeQuery = true)
+    String lockEnabledLeaderGuard();
 }
