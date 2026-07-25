@@ -43,8 +43,14 @@ class JwtCookieServiceTest {
         String valid = token(Map.of(
                 "sub", userId.toString(),
                 "exp", Instant.now().plusSeconds(60).getEpochSecond()));
-        String tampered = valid.substring(0, valid.length() - 1)
-                + (valid.endsWith("A") ? "B" : "A");
+        String[] tokenParts = valid.split("\\.");
+        byte[] tamperedSignature = Base64.getUrlDecoder().decode(tokenParts[2]);
+        tamperedSignature[0] ^= 0x01;
+        String tampered = tokenParts[0]
+                + "."
+                + tokenParts[1]
+                + "."
+                + encode(tamperedSignature);
 
         assertRejected(tampered);
         assertRejected(token(Map.of(

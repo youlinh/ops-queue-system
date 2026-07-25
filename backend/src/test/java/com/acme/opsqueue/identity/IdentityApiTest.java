@@ -24,10 +24,12 @@ import java.util.Set;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.junit.jupiter.api.BeforeEach;
@@ -269,18 +271,34 @@ class IdentityApiTest extends MySqlIntegrationTest {
     void concurrentSameUsernameCreationReturnsOneConflict() throws Exception {
         String username = "duplicate-" + UUID.randomUUID();
         CountDownLatch start = new CountDownLatch(1);
+        CyclicBarrier bothObservedAbsence = new CyclicBarrier(2);
+        AtomicInteger availabilityChecks = new AtomicInteger();
+        IdentityService racingIdentities = new IdentityService(users, passwordEncoder) {
+            @Override
+            void afterUsernameAvailabilityCheck(String normalizedUsername) {
+                assertThat(normalizedUsername).isEqualTo(username);
+                availabilityChecks.incrementAndGet();
+                try {
+                    bothObservedAbsence.await(10, TimeUnit.SECONDS);
+                } catch (Exception exception) {
+                    throw new IllegalStateException(
+                            "Both creates did not pass the username precheck", exception);
+                }
+            }
+        };
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             Future<String> first = executor.submit(
-                    () -> createAfterSignal(username, start));
+                    () -> createAfterSignal(racingIdentities, username, start));
             Future<String> second = executor.submit(
-                    () -> createAfterSignal(username, start));
+                    () -> createAfterSignal(racingIdentities, username, start));
             start.countDown();
 
             assertThat(Stream.of(first.get(10, TimeUnit.SECONDS),
                             second.get(10, TimeUnit.SECONDS)))
                     .containsExactlyInAnyOrder("CREATED", "CONFLICT");
         }
+        assertThat(availabilityChecks).hasValue(2);
         assertThat(users.findAll().stream()
                 .filter(account -> account.username().equals(username)))
                 .hasSize(1);
@@ -797,15 +815,17 @@ class IdentityApiTest extends MySqlIntegrationTest {
                         """.formatted(username, password)));
     }
 
-    private String createAfterSignal(String username, CountDownLatch start)
+    private String createAfterSignal(
+            IdentityService service, String username, CountDownLatch start)
             throws InterruptedException {
         start.await();
         try {
-            identities.create(
-                    username,
-                    "Concurrent Duplicate",
-                    "Concurrent-Password-1",
-                    Set.of(RoleName.DEVELOPER));
+            new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                    service.create(
+                            username,
+                            "Concurrent Duplicate",
+                            "Concurrent-Password-1",
+                            Set.of(RoleName.DEVELOPER)));
             return "CREATED";
         } catch (ResponseStatusException exception) {
             if (exception.getStatusCode().equals(HttpStatus.CONFLICT)) {

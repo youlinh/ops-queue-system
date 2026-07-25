@@ -9,6 +9,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import org.springframework.http.HttpStatus;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,21 +32,31 @@ public class IdentityService {
     @Transactional
     public CurrentUser authenticate(String username, String password, String sourceIp) {
         String normalizedUsername = UserAccount.normalizeUsername(username);
-        if (throttle.blocked(normalizedUsername, sourceIp)) {
+        String normalizedSourceIp = sourceIp == null ? "" : sourceIp;
+        LoginThrottle.Attempt attempt =
+                throttle.reserve(normalizedUsername, normalizedSourceIp);
+        if (attempt == null) {
             throw new LoginRateLimitedException();
         }
 
-        UserAccount account = users.findByUsername(normalizedUsername).orElse(null);
-        if (account == null
-                || !account.enabled()
-                || !passwordEncoder.matches(password, account.passwordHash())) {
-            throttle.failure(normalizedUsername, sourceIp);
-            throw new LoginRejectedException();
-        }
+        try {
+            UserAccount account = users.findByUsername(normalizedUsername).orElse(null);
+            if (account == null
+                    || !account.enabled()
+                    || !passwordEncoder.matches(password, account.passwordHash())) {
+                throttle.failure(attempt);
+                throw new LoginRejectedException();
+            }
 
-        throttle.success(normalizedUsername, sourceIp);
-        account.recordLogin(Instant.now());
-        return toCurrentUser(account);
+            throttle.success(attempt);
+            account.recordLogin(Instant.now());
+            return toCurrentUser(account);
+        } catch (LoginRejectedException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throttle.failure(attempt);
+            throw exception;
+        }
     }
 
     @Transactional(readOnly = true)
@@ -76,6 +88,7 @@ public class IdentityService {
         if (users.existsByUsername(normalized)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
         }
+        afterUsernameAvailabilityCheck(normalized);
         UserAccount account = UserAccount.create(
                 normalized,
                 displayName,
@@ -88,6 +101,10 @@ public class IdentityService {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "Username already exists", exception);
         }
+    }
+
+    void afterUsernameAvailabilityCheck(String normalizedUsername) {
+        // Test seam for deterministically exercising the database uniqueness race.
     }
 
     @Transactional
@@ -158,55 +175,130 @@ public class IdentityService {
     private static final class LoginThrottle {
         private static final int MAX_FAILURES = 5;
         private static final Duration WINDOW = Duration.ofMinutes(15);
+        private static final int LOCK_STRIPES = 256;
 
-        private final ConcurrentMap<String, Deque<Instant>> usernames =
+        private final ConcurrentMap<String, Deque<Attempt>> usernames =
                 new ConcurrentHashMap<>();
-        private final ConcurrentMap<String, Deque<Instant>> sourceIps =
+        private final ConcurrentMap<String, Deque<Attempt>> sourceIps =
                 new ConcurrentHashMap<>();
+        private final ReentrantLock[] locks = createLocks();
 
-        boolean blocked(String username, String sourceIp) {
-            Instant cutoff = Instant.now().minus(WINDOW);
-            return countSince(usernames, username, cutoff) >= MAX_FAILURES
-                    || countSince(sourceIps, sourceIp, cutoff) >= MAX_FAILURES;
+        Attempt reserve(String username, String sourceIp) {
+            return withLocks(username, sourceIp, () -> {
+                Instant now = Instant.now();
+                Instant cutoff = now.minus(WINDOW);
+                Deque<Attempt> usernameAttempts =
+                        activeAttempts(usernames, username, cutoff);
+                Deque<Attempt> sourceIpAttempts =
+                        activeAttempts(sourceIps, sourceIp, cutoff);
+                if (usernameAttempts.size() >= MAX_FAILURES
+                        || sourceIpAttempts.size() >= MAX_FAILURES) {
+                    return null;
+                }
+
+                Attempt attempt = new Attempt(username, sourceIp, now);
+                usernames.put(username, usernameAttempts);
+                sourceIps.put(sourceIp, sourceIpAttempts);
+                usernameAttempts.addLast(attempt);
+                sourceIpAttempts.addLast(attempt);
+                return attempt;
+            });
         }
 
-        void failure(String username, String sourceIp) {
-            Instant now = Instant.now();
-            add(usernames, username, now);
-            add(sourceIps, sourceIp, now);
+        void failure(Attempt attempt) {
+            withLocks(attempt.username, attempt.sourceIp, () -> {
+                attempt.failed = true;
+                return null;
+            });
         }
 
-        void success(String username, String sourceIp) {
-            usernames.remove(username);
+        void success(Attempt attempt) {
+            withLocks(attempt.username, attempt.sourceIp, () -> {
+                Deque<Attempt> usernameAttempts = usernames.get(attempt.username);
+                if (usernameAttempts != null) {
+                    usernameAttempts.removeIf(
+                            candidate -> candidate == attempt || candidate.failed);
+                    if (usernameAttempts.isEmpty()) {
+                        usernames.remove(attempt.username, usernameAttempts);
+                    }
+                }
+
+                Deque<Attempt> sourceIpAttempts = sourceIps.get(attempt.sourceIp);
+                if (sourceIpAttempts != null) {
+                    sourceIpAttempts.remove(attempt);
+                    if (sourceIpAttempts.isEmpty()) {
+                        sourceIps.remove(attempt.sourceIp, sourceIpAttempts);
+                    }
+                }
+                return null;
+            });
         }
 
-        private int countSince(
-                ConcurrentMap<String, Deque<Instant>> failures,
+        private Deque<Attempt> activeAttempts(
+                ConcurrentMap<String, Deque<Attempt>> attemptsByKey,
                 String key,
                 Instant cutoff) {
-            final int[] size = {0};
-            failures.computeIfPresent(key, (ignored, attempts) -> {
-                synchronized (attempts) {
-                    attempts.removeIf(attempt -> attempt.isBefore(cutoff));
-                    size[0] = attempts.size();
-                    return attempts.isEmpty() ? null : attempts;
-                }
-            });
-            return size[0];
+            Deque<Attempt> attempts =
+                    attemptsByKey.get(key);
+            if (attempts == null) {
+                return new ArrayDeque<>();
+            }
+            attempts.removeIf(attempt -> attempt.createdAt.isBefore(cutoff));
+            if (attempts.isEmpty()) {
+                attemptsByKey.remove(key, attempts);
+                return new ArrayDeque<>();
+            }
+            return attempts;
         }
 
-        private void add(
-                ConcurrentMap<String, Deque<Instant>> failures,
-                String key,
-                Instant now) {
-            failures.compute(key, (ignored, attempts) -> {
-                Deque<Instant> result = attempts == null ? new ArrayDeque<>() : attempts;
-                synchronized (result) {
-                    result.removeIf(attempt -> attempt.isBefore(now.minus(WINDOW)));
-                    result.addLast(now);
+        private <T> T withLocks(String username, String sourceIp, Supplier<T> action) {
+            int usernameStripe = stripe("username:" + username);
+            int sourceIpStripe = stripe("source-ip:" + sourceIp);
+            int firstStripe = Math.min(usernameStripe, sourceIpStripe);
+            int secondStripe = Math.max(usernameStripe, sourceIpStripe);
+            ReentrantLock first = locks[firstStripe];
+            ReentrantLock second = locks[secondStripe];
+
+            first.lock();
+            try {
+                if (firstStripe != secondStripe) {
+                    second.lock();
                 }
-                return result;
-            });
+                try {
+                    return action.get();
+                } finally {
+                    if (firstStripe != secondStripe) {
+                        second.unlock();
+                    }
+                }
+            } finally {
+                first.unlock();
+            }
+        }
+
+        private int stripe(String key) {
+            return Math.floorMod(key.hashCode(), locks.length);
+        }
+
+        private static ReentrantLock[] createLocks() {
+            ReentrantLock[] result = new ReentrantLock[LOCK_STRIPES];
+            for (int index = 0; index < result.length; index++) {
+                result[index] = new ReentrantLock();
+            }
+            return result;
+        }
+
+        static final class Attempt {
+            private final String username;
+            private final String sourceIp;
+            private final Instant createdAt;
+            private boolean failed;
+
+            private Attempt(String username, String sourceIp, Instant createdAt) {
+                this.username = username;
+                this.sourceIp = sourceIp;
+                this.createdAt = createdAt;
+            }
         }
     }
 }
