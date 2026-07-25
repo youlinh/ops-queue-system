@@ -145,6 +145,7 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
         jdbc.update("UPDATE roster_import_batches SET covered_dates = RPAD('', 200000, 'x') WHERE id = UUID_TO_BIN(?)",
                 preview.batchId().toString());
 
+        SqlCaptureInspector.reset();
         RosterImportBatchView summary = service.history(org.springframework.data.domain.PageRequest.of(0, 1))
                 .getContent().getFirst();
 
@@ -153,6 +154,12 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
         assertThat(RosterImportBatchView.class.getRecordComponents())
                 .extracting(java.lang.reflect.RecordComponent::getName)
                 .doesNotContain("coveredDates", "errors");
+        String historySql = SqlCaptureInspector.statements().stream()
+                .filter(sql -> sql.toLowerCase(java.util.Locale.ROOT).contains("roster_import_batches")
+                        && sql.toLowerCase(java.util.Locale.ROOT).contains("group by"))
+                .findFirst().orElseThrow();
+        assertThat(historySql.toLowerCase(java.util.Locale.ROOT))
+                .doesNotContain("covered_dates", " message", "source_row_number");
     }
 
     @Test
