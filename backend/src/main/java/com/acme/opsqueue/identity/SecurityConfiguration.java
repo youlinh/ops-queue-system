@@ -54,9 +54,17 @@ public class SecurityConfiguration {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, exception) ->
-                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED))
+                                writeJsonError(
+                                        response,
+                                        HttpServletResponse.SC_UNAUTHORIZED,
+                                        "UNAUTHORIZED",
+                                        "Authentication is required"))
                         .accessDeniedHandler((request, response, exception) ->
-                                response.sendError(HttpServletResponse.SC_FORBIDDEN)))
+                                writeJsonError(
+                                        response,
+                                        HttpServletResponse.SC_FORBIDDEN,
+                                        "FORBIDDEN",
+                                        "Access is forbidden")))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
                                 "/actuator/health",
@@ -67,6 +75,8 @@ public class SecurityConfiguration {
                         .hasRole(RoleName.LEADER.name())
                         .requestMatchers("/api/rosters/**")
                         .hasRole(RoleName.LEADER.name())
+                        .requestMatchers("/api/tasks")
+                        .hasRole(RoleName.DEVELOPER.name())
                         .requestMatchers("/api/**")
                         .authenticated()
                         .anyRequest()
@@ -80,6 +90,18 @@ public class SecurityConfiguration {
                 .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class);
 
         return http.build();
+    }
+
+    private static void writeJsonError(
+            HttpServletResponse response,
+            int status,
+            String code,
+            String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write(
+                "{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}");
     }
 
     private static final class JwtAuthenticationFilter extends OncePerRequestFilter {
