@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -94,7 +93,7 @@ public class RedistributionService {
                         normalizedReason, at, auditCommandId));
             } catch (RuntimeException exception) {
                 boolean marked = itemTransaction.markManualAttention(
-                        task.taskId(), operatorId, date, at);
+                        task.taskId(), operatorId, date, at, auditCommandId);
                 results.add(new RedistributionItemResult(
                         task.taskId(),
                         task.ticketNumber(),
@@ -108,7 +107,7 @@ public class RedistributionService {
         try {
             auditTransactions.markReady(auditCommandId);
             auditTransactions.finalizeCommand(auditCommandId);
-        } catch (DataAccessException exception) {
+        } catch (RuntimeException exception) {
             LOGGER.error(
                     "Redistribution {} completed with a pending audit command",
                     auditCommandId,

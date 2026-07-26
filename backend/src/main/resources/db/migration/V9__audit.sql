@@ -27,6 +27,7 @@ CREATE TABLE redistribution_audit_commands (
     source_operator_id BINARY(16) NOT NULL,
     operation_date DATE NOT NULL,
     task_count INT NOT NULL,
+    processed_count INT NOT NULL DEFAULT 0,
     success_count INT NOT NULL DEFAULT 0,
     command_state VARCHAR(16) NOT NULL,
     source_ip VARCHAR(64) NOT NULL,
@@ -38,6 +39,12 @@ CREATE TABLE redistribution_audit_commands (
         CHECK (task_count >= 0),
     CONSTRAINT chk_redistribution_audit_success_count
         CHECK (success_count >= 0 AND success_count <= task_count),
+    CONSTRAINT chk_redistribution_audit_processed_count
+        CHECK (
+            processed_count >= 0
+            AND processed_count <= task_count
+            AND success_count <= processed_count
+        ),
     CONSTRAINT chk_redistribution_audit_state
         CHECK (command_state IN ('RUNNING', 'READY')),
     CONSTRAINT fk_redistribution_audit_actor

@@ -37,11 +37,12 @@ public class RedistributionAuditTransaction {
         jdbc.update("""
                 INSERT INTO redistribution_audit_commands (
                     id, actor_id, source_operator_id, operation_date,
-                    task_count, success_count, command_state, source_ip,
+                    task_count, processed_count, success_count,
+                    command_state, source_ip,
                     occurred_at, created_at, updated_at, lease_until)
                 VALUES (
                     UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), ?,
-                    ?, 0, 'RUNNING', ?, ?,
+                    ?, 0, 0, 'RUNNING', ?, ?,
                     CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6),
                     DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 10 MINUTE))
                 """,
@@ -63,6 +64,7 @@ public class RedistributionAuditTransaction {
                     updated_at = CURRENT_TIMESTAMP(6)
                 WHERE id = UUID_TO_BIN(?)
                   AND command_state = 'RUNNING'
+                  AND processed_count = task_count
                 """,
                 commandId.toString());
         if (updated != 1) {
@@ -76,7 +78,7 @@ public class RedistributionAuditTransaction {
         List<PendingCommand> commands = jdbc.query("""
                 SELECT BIN_TO_UUID(actor_id) actor_id,
                        BIN_TO_UUID(source_operator_id) source_operator_id,
-                       operation_date, task_count, success_count,
+                       operation_date, task_count, processed_count, success_count,
                        source_ip, occurred_at
                 FROM redistribution_audit_commands
                 WHERE id = UUID_TO_BIN(?)
@@ -88,6 +90,7 @@ public class RedistributionAuditTransaction {
                         UUID.fromString(result.getString("source_operator_id")),
                         result.getObject("operation_date", LocalDate.class),
                         result.getInt("task_count"),
+                        result.getInt("processed_count"),
                         result.getInt("success_count"),
                         result.getString("source_ip"),
                         result.getObject("occurred_at", LocalDateTime.class)
@@ -96,7 +99,11 @@ public class RedistributionAuditTransaction {
         if (commands.isEmpty()) {
             return false;
         }
-        writeAudit(commands.getFirst(), "REDISTRIBUTION_EXECUTED");
+        PendingCommand command = commands.getFirst();
+        writeAudit(
+                command,
+                "REDISTRIBUTION_EXECUTED",
+                command.startedAt());
         jdbc.update(
                 "DELETE FROM redistribution_audit_commands WHERE id = UUID_TO_BIN(?)",
                 commandId.toString());
@@ -115,29 +122,29 @@ public class RedistributionAuditTransaction {
     }
 
     @Transactional(readOnly = true)
-    public List<UUID> expiredRunningCommandIds(Instant now) {
+    public List<UUID> expiredRunningCommandIds() {
         return jdbc.query("""
                 SELECT BIN_TO_UUID(id)
                 FROM redistribution_audit_commands
                 WHERE command_state = 'RUNNING'
-                  AND lease_until < ?
+                  AND lease_until < CURRENT_TIMESTAMP(6)
                 ORDER BY lease_until, id
                 """,
-                (result, row) -> UUID.fromString(result.getString(1)),
-                timestamp(now));
+                (result, row) -> UUID.fromString(result.getString(1)));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean abandonCommand(UUID commandId, Instant now) {
+    public RecoveryOutcome recoverExpiredCommand(UUID commandId) {
         List<PendingCommand> commands = jdbc.query("""
                 SELECT BIN_TO_UUID(actor_id) actor_id,
                        BIN_TO_UUID(source_operator_id) source_operator_id,
-                       operation_date, task_count, success_count,
-                       source_ip, occurred_at
+                       operation_date, task_count, processed_count, success_count,
+                       source_ip, occurred_at,
+                       CURRENT_TIMESTAMP(6) reconciled_at
                 FROM redistribution_audit_commands
                 WHERE id = UUID_TO_BIN(?)
                   AND command_state = 'RUNNING'
-                  AND lease_until < ?
+                  AND lease_until < CURRENT_TIMESTAMP(6)
                 FOR UPDATE
                 """,
                 (result, row) -> new PendingCommand(
@@ -145,23 +152,43 @@ public class RedistributionAuditTransaction {
                         UUID.fromString(result.getString("source_operator_id")),
                         result.getObject("operation_date", LocalDate.class),
                         result.getInt("task_count"),
+                        result.getInt("processed_count"),
                         result.getInt("success_count"),
                         result.getString("source_ip"),
                         result.getObject("occurred_at", LocalDateTime.class)
+                                .toInstant(ZoneOffset.UTC),
+                        result.getObject("reconciled_at", LocalDateTime.class)
                                 .toInstant(ZoneOffset.UTC)),
-                commandId.toString(),
-                timestamp(now));
+                commandId.toString());
         if (commands.isEmpty()) {
-            return false;
+            return RecoveryOutcome.NOOP;
         }
-        writeAudit(commands.getFirst(), "REDISTRIBUTION_INTERRUPTED");
+        PendingCommand command = commands.getFirst();
+        if (command.processedCount() == command.taskCount()) {
+            jdbc.update("""
+                    UPDATE redistribution_audit_commands
+                    SET command_state = 'READY',
+                        updated_at = CURRENT_TIMESTAMP(6)
+                    WHERE id = UUID_TO_BIN(?)
+                      AND command_state = 'RUNNING'
+                    """,
+                    commandId.toString());
+            return RecoveryOutcome.READY;
+        }
+        writeAudit(
+                command,
+                "REDISTRIBUTION_INTERRUPTED",
+                command.reconciledAt());
         jdbc.update(
                 "DELETE FROM redistribution_audit_commands WHERE id = UUID_TO_BIN(?)",
                 commandId.toString());
-        return true;
+        return RecoveryOutcome.INTERRUPTED;
     }
 
-    private void writeAudit(PendingCommand command, String action) {
+    private void writeAudit(
+            PendingCommand command,
+            String action,
+            Instant actionAt) {
         audits.record(
                 command.actorId(),
                 action,
@@ -171,10 +198,12 @@ public class RedistributionAuditTransaction {
                 Map.of(
                         "date", command.date().toString(),
                         "taskCount", command.taskCount(),
+                        "processedCount", command.processedCount(),
                         "successCount", command.successCount(),
-                        "failureCount", command.taskCount() - command.successCount()),
+                        "failureCount", command.taskCount() - command.successCount(),
+                        "startedAt", command.startedAt().toString()),
                 command.sourceIp(),
-                command.occurredAt());
+                actionAt);
     }
 
     private String normalizeSourceIp(String sourceIp) {
@@ -194,8 +223,36 @@ public class RedistributionAuditTransaction {
             UUID sourceOperatorId,
             LocalDate date,
             int taskCount,
+            int processedCount,
             int successCount,
             String sourceIp,
-            Instant occurredAt) {
+            Instant startedAt,
+            Instant reconciledAt) {
+        private PendingCommand(
+                UUID actorId,
+                UUID sourceOperatorId,
+                LocalDate date,
+                int taskCount,
+                int processedCount,
+                int successCount,
+                String sourceIp,
+                Instant startedAt) {
+            this(
+                    actorId,
+                    sourceOperatorId,
+                    date,
+                    taskCount,
+                    processedCount,
+                    successCount,
+                    sourceIp,
+                    startedAt,
+                    startedAt);
+        }
+    }
+
+    public enum RecoveryOutcome {
+        NOOP,
+        READY,
+        INTERRUPTED
     }
 }

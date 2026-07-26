@@ -63,10 +63,14 @@ public class AuditService {
                     policy(Set.of("date"), Set.of())),
             Map.entry("REDISTRIBUTION_EXECUTED",
                     policy(Set.of(),
-                            Set.of("date", "taskCount", "successCount", "failureCount"))),
+                            Set.of(
+                                    "date", "taskCount", "processedCount",
+                                    "successCount", "failureCount", "startedAt"))),
             Map.entry("REDISTRIBUTION_INTERRUPTED",
                     policy(Set.of(),
-                            Set.of("date", "taskCount", "successCount", "failureCount"))));
+                            Set.of(
+                                    "date", "taskCount", "processedCount",
+                                    "successCount", "failureCount", "startedAt"))));
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;

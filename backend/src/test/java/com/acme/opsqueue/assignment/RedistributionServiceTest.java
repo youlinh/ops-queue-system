@@ -160,6 +160,58 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
     }
 
     @Test
+    void completedItemsRecoverAsExecutedWhenReadyTransitionInitiallyFails() {
+        UUID pending = seedTask(
+                "OPS-20260725-0001", "PENDING", source.id(), DATE,
+                "2026-07-25 02:00:00");
+        assignments.setUnavailable(
+                source.id(), DATE, "cannot participate", leader.id(), NOW);
+        executeAsMigrationUser("""
+                CREATE TRIGGER trg_test_redistribution_ready_failure
+                BEFORE UPDATE ON redistribution_audit_commands
+                FOR EACH ROW
+                BEGIN
+                    IF NEW.command_state = 'READY' THEN
+                        SIGNAL SQLSTATE '45000'
+                            SET MESSAGE_TEXT = 'injected ready transition failure';
+                    END IF;
+                END
+                """);
+
+        RedistributionResult result;
+        try {
+            result = service.redistribute(
+                    source.id(), DATE, leader.id(), "recover ready", NOW);
+        } finally {
+            executeAsMigrationUser(
+                    "DROP TRIGGER IF EXISTS trg_test_redistribution_ready_failure");
+        }
+
+        assertThat(result.items()).singleElement().satisfies(item ->
+                assertThat(item.success()).isTrue());
+        assertThat(assignee(pending)).isEqualTo(third.id());
+        assertThat(auditCount("REDISTRIBUTION_EXECUTED")).isZero();
+        UUID commandId = UUID.fromString(jdbc.queryForObject(
+                "SELECT BIN_TO_UUID(id) FROM redistribution_audit_commands",
+                String.class));
+        assertThat(jdbc.queryForObject("""
+                SELECT processed_count FROM redistribution_audit_commands
+                WHERE id = UUID_TO_BIN(?)
+                """, Integer.class, commandId.toString())).isEqualTo(1);
+        jdbc.update("""
+                UPDATE redistribution_audit_commands
+                SET lease_until = DATE_SUB(CURRENT_TIMESTAMP(6), INTERVAL 1 MINUTE)
+                WHERE id = UUID_TO_BIN(?)
+                """, commandId.toString());
+
+        assertThat(redistributionAudits.recoverExpiredCommand(commandId))
+                .isEqualTo(RedistributionAuditTransaction.RecoveryOutcome.READY);
+        assertThat(redistributionAudits.finalizeCommand(commandId)).isTrue();
+        assertThat(auditCount("REDISTRIBUTION_EXECUTED")).isEqualTo(1);
+        assertThat(auditCount("REDISTRIBUTION_INTERRUPTED")).isZero();
+    }
+
+    @Test
     void runningCommandCannotBeReportedAsExecutedAndExpiresAsInterrupted() {
         UUID commandId = redistributionAudits.begin(
                 leader.id(), source.id(), DATE, 2, "192.0.2.90", NOW);
@@ -173,10 +225,16 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
                 """,
                 commandId.toString());
 
-        assertThat(redistributionAudits.abandonCommand(
-                commandId, Instant.now().plusSeconds(5))).isTrue();
+        assertThat(redistributionAudits.recoverExpiredCommand(commandId))
+                .isEqualTo(
+                        RedistributionAuditTransaction.RecoveryOutcome.INTERRUPTED);
         assertThat(auditCount("REDISTRIBUTION_EXECUTED")).isZero();
         assertThat(auditCount("REDISTRIBUTION_INTERRUPTED")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+                SELECT occurred_at > ?
+                FROM audit_logs
+                WHERE action = 'REDISTRIBUTION_INTERRUPTED'
+                """, Boolean.class, Timestamp.from(NOW))).isTrue();
         assertThat(pendingAuditCount()).isZero();
     }
 

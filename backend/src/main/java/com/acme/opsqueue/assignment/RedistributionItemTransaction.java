@@ -71,8 +71,10 @@ class RedistributionItemTransaction {
         if (!"PENDING".equals(task.status())
                 || !task.operationDate().equals(operationDate)
                 || !task.currentAssigneeId().equals(sourceOperatorId)) {
-            return RedistributionItemResult.failure(
+            RedistributionItemResult result = RedistributionItemResult.failure(
                     task, "Task status or assignment changed", false);
+            recordProcessed(auditCommandId, false);
+            return result;
         }
 
         AssignmentDecision decision;
@@ -80,13 +82,17 @@ class RedistributionItemTransaction {
             decision = decide(task, at);
         } catch (RuntimeException exception) {
             setManualAttention(task.id(), at);
-            return RedistributionItemResult.failure(
+            RedistributionItemResult result = RedistributionItemResult.failure(
                     task, assignmentError(exception), true);
+            recordProcessed(auditCommandId, false);
+            return result;
         }
         if (decision.assigneeId().equals(task.currentAssigneeId())) {
             setManualAttention(task.id(), at);
-            return RedistributionItemResult.failure(
+            RedistributionItemResult result = RedistributionItemResult.failure(
                     task, "Automatic assignment did not find a different operator", true);
+            recordProcessed(auditCommandId, false);
+            return result;
         }
 
         String candidates = serializeCandidates(decision);
@@ -132,20 +138,7 @@ class RedistributionItemTransaction {
                 candidates,
                 leaderId.toString(),
                 AssignmentService.timestamp(at));
-        int auditUpdated = jdbc.update("""
-                UPDATE redistribution_audit_commands
-                SET success_count = success_count + 1,
-                    updated_at = CURRENT_TIMESTAMP(6),
-                    lease_until = DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 10 MINUTE)
-                WHERE id = UUID_TO_BIN(?)
-                  AND command_state = 'RUNNING'
-                  AND success_count < task_count
-                """,
-                auditCommandId.toString());
-        if (auditUpdated != 1) {
-            throw new IllegalStateException(
-                    "Redistribution audit command is unavailable");
-        }
+        recordProcessed(auditCommandId, true);
         return RedistributionItemResult.success(task, decision.assigneeId());
     }
 
@@ -169,7 +162,8 @@ class RedistributionItemTransaction {
             UUID taskId,
             UUID sourceOperatorId,
             LocalDate operationDate,
-            Instant at) {
+            Instant at,
+            UUID auditCommandId) {
         int updated = jdbc.update("""
                 UPDATE tasks
                 SET needs_manual_attention = TRUE,
@@ -184,7 +178,27 @@ class RedistributionItemTransaction {
                 taskId.toString(),
                 sourceOperatorId.toString(),
                 operationDate);
+        recordProcessed(auditCommandId, false);
         return updated == 1;
+    }
+
+    private void recordProcessed(UUID auditCommandId, boolean success) {
+        int updated = jdbc.update("""
+                UPDATE redistribution_audit_commands
+                SET processed_count = processed_count + 1,
+                    success_count = success_count + ?,
+                    updated_at = CURRENT_TIMESTAMP(6),
+                    lease_until = DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 10 MINUTE)
+                WHERE id = UUID_TO_BIN(?)
+                  AND command_state = 'RUNNING'
+                  AND processed_count < task_count
+                """,
+                success ? 1 : 0,
+                auditCommandId.toString());
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Redistribution audit command is unavailable");
+        }
     }
 
     private AssignmentDecision decide(
