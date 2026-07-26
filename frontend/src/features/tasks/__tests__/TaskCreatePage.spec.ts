@@ -69,6 +69,7 @@ describe('TaskCreatePage', () => {
       id: 'task-1',
       ticketNumber: 'OPS-20260725-0001',
       assigneeId: 'operator-1',
+      assigneeName: '二线管理员一',
       assignmentRule: 'AFTER_HOURS_SECOND',
     })
     const wrapper = mountPage()
@@ -81,7 +82,8 @@ describe('TaskCreatePage', () => {
     }))
 
     expect(wrapper.text()).toContain('OPS-20260725-0001')
-    expect(wrapper.text()).toContain('operator-1')
+    expect(wrapper.text()).toContain('二线管理员一')
+    expect(wrapper.text()).not.toContain('operator-1')
     expect(wrapper.text()).toContain('晚间优先二线')
   })
 

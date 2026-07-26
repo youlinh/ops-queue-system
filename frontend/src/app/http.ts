@@ -30,7 +30,13 @@ export async function unsafeRequest<T = unknown>(
   config: AxiosRequestConfig,
 ): Promise<AxiosResponse<T>> {
   await ensureCsrf()
-  return http.request<T>(config)
+  try {
+    return await http.request<T>(config)
+  } finally {
+    // The stateless backend can issue a fresh cookie token after a write.
+    // Bootstrap again before the next sequential mutation.
+    resetCsrf()
+  }
 }
 
 export function apiErrorMessage(

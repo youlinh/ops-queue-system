@@ -132,7 +132,11 @@ class CommandAuditWiringTest {
                 creation, lifecycle, mock(TaskQueryService.class), CLOCK, audits);
         UUID taskId = UUID.randomUUID();
         CreatedTask created = new CreatedTask(
-                taskId, "Q202607250001", operator.id(), AssignmentRule.DAY_SECOND);
+                taskId,
+                "Q202607250001",
+                operator.id(),
+                operator.displayName(),
+                AssignmentRule.DAY_SECOND);
         TaskView inProgress = taskView(taskId, operator.id(), "IN_PROGRESS", null);
         TaskView completed = taskView(taskId, operator.id(), "COMPLETED", 30);
 

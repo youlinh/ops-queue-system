@@ -349,6 +349,7 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.ticketNumber").value("OPS-20260725-0001"))
                 .andExpect(jsonPath("$.assigneeId").value(second.id().toString()))
+                .andExpect(jsonPath("$.assigneeName").value(second.displayName()))
                 .andExpect(jsonPath("$.assignmentRule").value("DAY_SECOND"));
 
         assertThat(jdbc.queryForObject(

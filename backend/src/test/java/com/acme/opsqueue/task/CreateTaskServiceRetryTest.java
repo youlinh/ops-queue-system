@@ -29,6 +29,7 @@ class CreateTaskServiceRetryTest {
                 UUID.fromString("00000000-0000-0000-0000-000000000003"),
                 "OPS-20260725-0001",
                 ASSIGNEE,
+                "Operator Two",
                 AssignmentRule.DAY_SECOND);
         when(transaction.execute(any(), eq(CREATOR), eq(SUBMITTED_AT)))
                 .thenThrow(new CannotAcquireLockException("deadlock one"))

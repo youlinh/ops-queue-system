@@ -222,7 +222,7 @@ async function submit(): Promise<void> {
       <p class="result-kicker">取号成功</p>
       <h3>{{ result.ticketNumber }}</h3>
       <dl>
-        <div><dt>分派管理员</dt><dd>{{ result.assigneeId }}</dd></div>
+        <div><dt>已分配负责人</dt><dd>{{ result.assigneeName }}</dd></div>
         <div>
           <dt>分派规则</dt>
           <dd>{{ assignmentRuleLabel(result.assignmentRule) }}</dd>

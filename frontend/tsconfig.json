@@ -17,5 +17,11 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "tests/e2e/**/*.ts",
+    "playwright.config.ts",
+    "vite.config.ts"
+  ]
 }

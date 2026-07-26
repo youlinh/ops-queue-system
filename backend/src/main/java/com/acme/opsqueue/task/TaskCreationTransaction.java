@@ -119,8 +119,19 @@ public class TaskCreationTransaction {
                         "status", "PENDING",
                         "assignmentRule", decision.rule().name()),
                 submittedAt);
+        UUID assigneeId = decision.assigneeId();
+        String assigneeName = activeOperators.stream()
+                .filter(operator -> operator.id().equals(assigneeId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Assigned operator is not active"))
+                .displayName();
         return new CreatedTask(
-                taskId, ticketNumber, decision.assigneeId(), decision.rule());
+                taskId,
+                ticketNumber,
+                assigneeId,
+                assigneeName,
+                decision.rule());
     }
 
     private void lockScheduleDate(LocalDate operationDate) {

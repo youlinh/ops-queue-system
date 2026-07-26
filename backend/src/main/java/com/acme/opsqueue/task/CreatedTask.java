@@ -7,5 +7,6 @@ public record CreatedTask(
         UUID id,
         String ticketNumber,
         UUID assigneeId,
+        String assigneeName,
         AssignmentRule assignmentRule) {
 }

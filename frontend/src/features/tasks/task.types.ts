@@ -7,6 +7,7 @@ export interface CreatedTask {
   id: string
   ticketNumber: string
   assigneeId: string
+  assigneeName: string
   assignmentRule: string
 }
 

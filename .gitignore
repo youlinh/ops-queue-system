@@ -4,4 +4,7 @@ outputs/
 backend/target/
 frontend/node_modules/
 frontend/dist/
+frontend/playwright/.auth/
+frontend/playwright-report/
+frontend/test-results/
 work/
