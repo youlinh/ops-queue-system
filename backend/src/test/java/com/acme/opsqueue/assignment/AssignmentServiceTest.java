@@ -186,6 +186,36 @@ class AssignmentServiceTest extends MySqlIntegrationTest {
     }
 
     @Test
+    void removingUnavailabilityRejectsUnknownNonOperatorAndDisabledTargets() throws Exception {
+        assertReason(() -> service.removeUnavailable(
+                        UUID.randomUUID(), OPERATION_DATE, leader.id()),
+                AssignmentValidationException.Reason.INVALID_TARGET);
+        assertReason(() -> service.removeUnavailable(
+                        developer.id(), OPERATION_DATE, leader.id()),
+                AssignmentValidationException.Reason.INVALID_TARGET);
+
+        service.setUnavailable(
+                target.id(), OPERATION_DATE, "请假", leader.id(), NOW);
+        target.disable();
+        users.saveAndFlush(target);
+        assertReason(() -> service.removeUnavailable(
+                        target.id(), OPERATION_DATE, leader.id()),
+                AssignmentValidationException.Reason.INVALID_TARGET);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM unavailability
+                WHERE user_id = UUID_TO_BIN(?) AND unavailable_date = ?
+                """, Integer.class, target.id().toString(), OPERATION_DATE))
+                .isEqualTo(1);
+
+        mvc.perform(delete("/api/unavailability/{operatorId}/{date}",
+                        UUID.randomUUID(), OPERATION_DATE)
+                        .with(csrf()).with(authentication(auth(leader))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code")
+                        .value("INVALID_ASSIGNMENT_TARGET"));
+    }
+
+    @Test
     void assignmentEndpointsEnforceAuthenticationCsrfRolesAndAuthenticatedActor() throws Exception {
         UUID taskId = seedTask("PENDING", assignee.id());
         String transfer = """

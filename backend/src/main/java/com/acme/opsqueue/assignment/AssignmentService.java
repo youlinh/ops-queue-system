@@ -113,14 +113,15 @@ public class AssignmentService {
     @Transactional
     public void removeUnavailable(UUID operatorId, LocalDate date, UUID leaderId) {
         requireLeader(leaderId);
-        if (operatorId == null || date == null) {
+        if (date == null) {
             throw AssignmentValidationException.invalidRequest(
-                    "Operator and date are required");
+                    "Unavailability date is required");
         }
+        UserAccount operator = requireEnabledOperator(operatorId);
         jdbc.update("""
                 DELETE FROM unavailability
                 WHERE user_id = UUID_TO_BIN(?) AND unavailable_date = ?
-                """, operatorId.toString(), date);
+                """, operator.id().toString(), date);
     }
 
     void requireLeader(UUID actorId) {
