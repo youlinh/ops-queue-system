@@ -28,13 +28,18 @@ CREATE TABLE redistribution_audit_commands (
     operation_date DATE NOT NULL,
     task_count INT NOT NULL,
     success_count INT NOT NULL DEFAULT 0,
+    command_state VARCHAR(16) NOT NULL,
     source_ip VARCHAR(64) NOT NULL,
     occurred_at DATETIME(6) NOT NULL,
     created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    lease_until DATETIME(6) NOT NULL,
     CONSTRAINT chk_redistribution_audit_task_count
         CHECK (task_count >= 0),
     CONSTRAINT chk_redistribution_audit_success_count
         CHECK (success_count >= 0 AND success_count <= task_count),
+    CONSTRAINT chk_redistribution_audit_state
+        CHECK (command_state IN ('RUNNING', 'READY')),
     CONSTRAINT fk_redistribution_audit_actor
         FOREIGN KEY (actor_id) REFERENCES users (id),
     CONSTRAINT fk_redistribution_audit_source
@@ -43,6 +48,8 @@ CREATE TABLE redistribution_audit_commands (
 
 CREATE INDEX idx_redistribution_audit_created
     ON redistribution_audit_commands (created_at, id);
+CREATE INDEX idx_redistribution_audit_state_lease
+    ON redistribution_audit_commands (command_state, lease_until, id);
 
 CREATE TRIGGER trg_audit_logs_no_update
 BEFORE UPDATE ON audit_logs

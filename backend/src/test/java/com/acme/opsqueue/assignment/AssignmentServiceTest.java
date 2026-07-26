@@ -66,7 +66,7 @@ class AssignmentServiceTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void resetFixture() {
-        jdbc.execute("TRUNCATE TABLE audit_logs");
+        truncateAuditLogs();
         jdbc.update("DELETE FROM unavailability");
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");

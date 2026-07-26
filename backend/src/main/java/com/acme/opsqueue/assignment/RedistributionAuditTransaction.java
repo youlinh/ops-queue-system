@@ -37,10 +37,13 @@ public class RedistributionAuditTransaction {
         jdbc.update("""
                 INSERT INTO redistribution_audit_commands (
                     id, actor_id, source_operator_id, operation_date,
-                    task_count, success_count, source_ip, occurred_at, created_at)
+                    task_count, success_count, command_state, source_ip,
+                    occurred_at, created_at, updated_at, lease_until)
                 VALUES (
                     UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), ?,
-                    ?, 0, ?, ?, ?)
+                    ?, 0, 'RUNNING', ?, ?,
+                    CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6),
+                    DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 10 MINUTE))
                 """,
                 commandId.toString(),
                 actorId.toString(),
@@ -48,20 +51,36 @@ public class RedistributionAuditTransaction {
                 date,
                 taskCount,
                 normalizeSourceIp(sourceIp),
-                timestamp,
                 timestamp);
         return commandId;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void finalizeCommand(UUID commandId) {
-        PendingCommand command = jdbc.queryForObject("""
+    public void markReady(UUID commandId) {
+        int updated = jdbc.update("""
+                UPDATE redistribution_audit_commands
+                SET command_state = 'READY',
+                    updated_at = CURRENT_TIMESTAMP(6)
+                WHERE id = UUID_TO_BIN(?)
+                  AND command_state = 'RUNNING'
+                """,
+                commandId.toString());
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Redistribution audit command cannot be completed");
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean finalizeCommand(UUID commandId) {
+        List<PendingCommand> commands = jdbc.query("""
                 SELECT BIN_TO_UUID(actor_id) actor_id,
                        BIN_TO_UUID(source_operator_id) source_operator_id,
                        operation_date, task_count, success_count,
                        source_ip, occurred_at
                 FROM redistribution_audit_commands
                 WHERE id = UUID_TO_BIN(?)
+                  AND command_state = 'READY'
                 FOR UPDATE
                 """,
                 (result, row) -> new PendingCommand(
@@ -74,12 +93,78 @@ public class RedistributionAuditTransaction {
                         result.getObject("occurred_at", LocalDateTime.class)
                                 .toInstant(ZoneOffset.UTC)),
                 commandId.toString());
-        if (command == null) {
-            return;
+        if (commands.isEmpty()) {
+            return false;
         }
+        writeAudit(commands.getFirst(), "REDISTRIBUTION_EXECUTED");
+        jdbc.update(
+                "DELETE FROM redistribution_audit_commands WHERE id = UUID_TO_BIN(?)",
+                commandId.toString());
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public List<UUID> readyCommandIds() {
+        return jdbc.query("""
+                SELECT BIN_TO_UUID(id)
+                FROM redistribution_audit_commands
+                WHERE command_state = 'READY'
+                ORDER BY updated_at, id
+                """,
+                (result, row) -> UUID.fromString(result.getString(1)));
+    }
+
+    @Transactional(readOnly = true)
+    public List<UUID> expiredRunningCommandIds(Instant now) {
+        return jdbc.query("""
+                SELECT BIN_TO_UUID(id)
+                FROM redistribution_audit_commands
+                WHERE command_state = 'RUNNING'
+                  AND lease_until < ?
+                ORDER BY lease_until, id
+                """,
+                (result, row) -> UUID.fromString(result.getString(1)),
+                timestamp(now));
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean abandonCommand(UUID commandId, Instant now) {
+        List<PendingCommand> commands = jdbc.query("""
+                SELECT BIN_TO_UUID(actor_id) actor_id,
+                       BIN_TO_UUID(source_operator_id) source_operator_id,
+                       operation_date, task_count, success_count,
+                       source_ip, occurred_at
+                FROM redistribution_audit_commands
+                WHERE id = UUID_TO_BIN(?)
+                  AND command_state = 'RUNNING'
+                  AND lease_until < ?
+                FOR UPDATE
+                """,
+                (result, row) -> new PendingCommand(
+                        UUID.fromString(result.getString("actor_id")),
+                        UUID.fromString(result.getString("source_operator_id")),
+                        result.getObject("operation_date", LocalDate.class),
+                        result.getInt("task_count"),
+                        result.getInt("success_count"),
+                        result.getString("source_ip"),
+                        result.getObject("occurred_at", LocalDateTime.class)
+                                .toInstant(ZoneOffset.UTC)),
+                commandId.toString(),
+                timestamp(now));
+        if (commands.isEmpty()) {
+            return false;
+        }
+        writeAudit(commands.getFirst(), "REDISTRIBUTION_INTERRUPTED");
+        jdbc.update(
+                "DELETE FROM redistribution_audit_commands WHERE id = UUID_TO_BIN(?)",
+                commandId.toString());
+        return true;
+    }
+
+    private void writeAudit(PendingCommand command, String action) {
         audits.record(
                 command.actorId(),
-                "REDISTRIBUTION_EXECUTED",
+                action,
                 "OPERATOR",
                 command.sourceOperatorId(),
                 Map.of(),
@@ -90,21 +175,6 @@ public class RedistributionAuditTransaction {
                         "failureCount", command.taskCount() - command.successCount()),
                 command.sourceIp(),
                 command.occurredAt());
-        jdbc.update(
-                "DELETE FROM redistribution_audit_commands WHERE id = UUID_TO_BIN(?)",
-                commandId.toString());
-    }
-
-    @Transactional(readOnly = true)
-    public List<UUID> staleCommandIds(Instant cutoff) {
-        return jdbc.query("""
-                SELECT BIN_TO_UUID(id)
-                FROM redistribution_audit_commands
-                WHERE created_at < ?
-                ORDER BY created_at, id
-                """,
-                (result, row) -> UUID.fromString(result.getString(1)),
-                timestamp(cutoff));
     }
 
     private String normalizeSourceIp(String sourceIp) {

@@ -106,6 +106,7 @@ public class RedistributionService {
             }
         }
         try {
+            auditTransactions.markReady(auditCommandId);
             auditTransactions.finalizeCommand(auditCommandId);
         } catch (DataAccessException exception) {
             LOGGER.error(

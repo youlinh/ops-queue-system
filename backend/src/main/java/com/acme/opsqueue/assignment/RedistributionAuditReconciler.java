@@ -1,7 +1,6 @@
 package com.acme.opsqueue.assignment;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,8 +16,6 @@ import org.springframework.stereotype.Component;
 public class RedistributionAuditReconciler {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(RedistributionAuditReconciler.class);
-    private static final Duration STALE_AFTER = Duration.ofMinutes(5);
-
     private final RedistributionAuditTransaction auditTransactions;
     private final Clock clock;
 
@@ -32,13 +29,23 @@ public class RedistributionAuditReconciler {
             initialDelayString = "${ops.audit.reconciliation.initial-delay-ms:60000}",
             fixedDelayString = "${ops.audit.reconciliation.delay-ms:60000}")
     public void reconcile() {
-        Instant cutoff = clock.instant().minus(STALE_AFTER);
-        for (var commandId : auditTransactions.staleCommandIds(cutoff)) {
+        for (var commandId : auditTransactions.readyCommandIds()) {
             try {
                 auditTransactions.finalizeCommand(commandId);
             } catch (RuntimeException exception) {
                 LOGGER.error(
                         "Unable to reconcile redistribution audit command {}",
+                        commandId,
+                        exception);
+            }
+        }
+        Instant now = clock.instant();
+        for (var commandId : auditTransactions.expiredRunningCommandIds(now)) {
+            try {
+                auditTransactions.abandonCommand(commandId, now);
+            } catch (RuntimeException exception) {
+                LOGGER.error(
+                        "Unable to mark interrupted redistribution command {}",
                         commandId,
                         exception);
             }

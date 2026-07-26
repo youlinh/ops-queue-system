@@ -73,7 +73,7 @@ class TaskLifecycleServiceTest extends MySqlIntegrationTest {
     @BeforeEach
     void resetFixture() {
         reset(objectMapper);
-        jdbc.execute("TRUNCATE TABLE audit_logs");
+        truncateAuditLogs();
         jdbc.update("DELETE FROM notification_events");
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");
@@ -276,6 +276,12 @@ class TaskLifecycleServiceTest extends MySqlIntegrationTest {
                         .with(csrf()).with(authentication(authenticationFor(assigneePrincipal)))
                         .contentType(APPLICATION_JSON).content("{\"actualMinutes\":10}"))
                 .andExpect(status().isConflict());
+        assertThat(jdbc.queryForObject(
+                """
+                SELECT COUNT(*) FROM audit_logs
+                WHERE action IN ('TASK_CALLED', 'TASK_COMPLETED')
+                """,
+                Integer.class)).isZero();
     }
 
     @Test

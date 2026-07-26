@@ -65,6 +65,7 @@ class RedistributionItemTransaction {
             Instant at,
             UUID auditCommandId) {
         assignments.requireLeader(leaderId);
+        renewAuditLease(auditCommandId);
         lockScheduleDate(operationDate);
         TaskAssignmentRecord task = lockTask(taskId);
         if (!"PENDING".equals(task.status())
@@ -133,8 +134,11 @@ class RedistributionItemTransaction {
                 AssignmentService.timestamp(at));
         int auditUpdated = jdbc.update("""
                 UPDATE redistribution_audit_commands
-                SET success_count = success_count + 1
+                SET success_count = success_count + 1,
+                    updated_at = CURRENT_TIMESTAMP(6),
+                    lease_until = DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 10 MINUTE)
                 WHERE id = UUID_TO_BIN(?)
+                  AND command_state = 'RUNNING'
                   AND success_count < task_count
                 """,
                 auditCommandId.toString());
@@ -143,6 +147,21 @@ class RedistributionItemTransaction {
                     "Redistribution audit command is unavailable");
         }
         return RedistributionItemResult.success(task, decision.assigneeId());
+    }
+
+    private void renewAuditLease(UUID auditCommandId) {
+        int updated = jdbc.update("""
+                UPDATE redistribution_audit_commands
+                SET updated_at = CURRENT_TIMESTAMP(6),
+                    lease_until = DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 10 MINUTE)
+                WHERE id = UUID_TO_BIN(?)
+                  AND command_state = 'RUNNING'
+                """,
+                auditCommandId.toString());
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Redistribution audit command is unavailable");
+        }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

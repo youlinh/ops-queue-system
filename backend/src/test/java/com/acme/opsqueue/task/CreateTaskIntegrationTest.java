@@ -89,7 +89,7 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void resetFixture() {
-        jdbc.execute("TRUNCATE TABLE audit_logs");
+        truncateAuditLogs();
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");
         jdbc.update("DELETE FROM unavailability");
@@ -366,7 +366,7 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
     void auditInsertFailureRollsBackTaskTicketAndAssignment() throws Exception {
         rosters.saveAndFlush(DutyRoster.of(OPERATION_DATE, second.id(), third.id()));
         CurrentUser developerPrincipal = currentUser(creator, RoleName.DEVELOPER);
-        jdbc.execute("""
+        executeAsMigrationUser("""
                 CREATE TRIGGER trg_test_audit_insert_failure
                 BEFORE INSERT ON audit_logs
                 FOR EACH ROW
@@ -381,7 +381,8 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
                             .content(requestJson(alpha.id())))
                     .andExpect(status().isServiceUnavailable());
         } finally {
-            jdbc.execute("DROP TRIGGER IF EXISTS trg_test_audit_insert_failure");
+            executeAsMigrationUser(
+                    "DROP TRIGGER IF EXISTS trg_test_audit_insert_failure");
         }
 
         assertNoAllocationSideEffects();

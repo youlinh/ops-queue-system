@@ -48,7 +48,7 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.execute("TRUNCATE TABLE audit_logs");
+        truncateAuditLogs();
         rosters.deleteAll();
         batches.deleteAll();
         users.deleteAll();

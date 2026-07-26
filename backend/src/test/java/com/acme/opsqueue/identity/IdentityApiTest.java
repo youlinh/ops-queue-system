@@ -96,7 +96,7 @@ class IdentityApiTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void removeAccountsCreatedByPreviousTests() {
-        jdbc.execute("TRUNCATE TABLE audit_logs");
+        truncateAuditLogs();
         springSecurityFilterChain.getFilters("/api/auth/csrf").stream()
                 .filter(CsrfFilter.class::isInstance)
                 .map(CsrfFilter.class::cast)
@@ -201,6 +201,7 @@ class IdentityApiTest extends MySqlIntegrationTest {
                         .contentType(APPLICATION_JSON)
                         .content(createUserJson("csrf-user", "DEVELOPER")))
                 .andExpect(status().isCreated());
+        assertThat(auditCount("ACCOUNT_CREATED")).isEqualTo(1);
     }
 
     @Test

@@ -47,7 +47,7 @@ class AuditIntegrationTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void resetFixture() {
-        jdbc.execute("TRUNCATE TABLE audit_logs");
+        truncateAuditLogs();
         users.findAll().stream()
                 .filter(account -> !account.username().equals("test-bootstrap-leader"))
                 .forEach(users::delete);
@@ -108,6 +108,10 @@ class AuditIntegrationTest extends MySqlIntegrationTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
                         jdbc.update("DELETE FROM audit_logs"))
                 .hasMessageContaining("audit_logs is append-only");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        jdbc.execute("TRUNCATE TABLE audit_logs"))
+                .rootCause()
+                .hasMessageContaining("DROP command denied");
         assertThat(countAuditRows()).isEqualTo(1);
     }
 

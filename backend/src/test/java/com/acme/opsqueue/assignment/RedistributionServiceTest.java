@@ -59,9 +59,10 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void resetFixture() {
-        jdbc.execute("DROP TRIGGER IF EXISTS trg_test_redistribution_audit_insert_failure");
+        executeAsMigrationUser(
+                "DROP TRIGGER IF EXISTS trg_test_redistribution_audit_insert_failure");
         jdbc.update("DELETE FROM redistribution_audit_commands");
-        jdbc.execute("TRUNCATE TABLE audit_logs");
+        truncateAuditLogs();
         jdbc.update("DELETE FROM unavailability");
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");
@@ -120,7 +121,7 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
                 "2026-07-25 02:00:00");
         assignments.setUnavailable(
                 source.id(), DATE, "cannot participate", leader.id(), NOW);
-        jdbc.execute("""
+        executeAsMigrationUser("""
                 CREATE TRIGGER trg_test_redistribution_audit_insert_failure
                 BEFORE INSERT ON audit_logs
                 FOR EACH ROW
@@ -132,7 +133,7 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
             result = service.redistribute(
                     source.id(), DATE, leader.id(), "recoverable audit", NOW);
         } finally {
-            jdbc.execute(
+            executeAsMigrationUser(
                     "DROP TRIGGER IF EXISTS trg_test_redistribution_audit_insert_failure");
         }
 
@@ -156,6 +157,27 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
                 WHERE action = 'REDISTRIBUTION_EXECUTED'
                 """,
                 String.class)).isEqualTo("1");
+    }
+
+    @Test
+    void runningCommandCannotBeReportedAsExecutedAndExpiresAsInterrupted() {
+        UUID commandId = redistributionAudits.begin(
+                leader.id(), source.id(), DATE, 2, "192.0.2.90", NOW);
+
+        assertThat(redistributionAudits.finalizeCommand(commandId)).isFalse();
+        assertThat(auditCount("REDISTRIBUTION_EXECUTED")).isZero();
+        jdbc.update("""
+                UPDATE redistribution_audit_commands
+                SET lease_until = DATE_SUB(CURRENT_TIMESTAMP(6), INTERVAL 1 MINUTE)
+                WHERE id = UUID_TO_BIN(?)
+                """,
+                commandId.toString());
+
+        assertThat(redistributionAudits.abandonCommand(
+                commandId, Instant.now().plusSeconds(5))).isTrue();
+        assertThat(auditCount("REDISTRIBUTION_EXECUTED")).isZero();
+        assertThat(auditCount("REDISTRIBUTION_INTERRUPTED")).isEqualTo(1);
+        assertThat(pendingAuditCount()).isZero();
     }
 
     @Test
@@ -259,6 +281,7 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].taskId").value(pending.toString()))
                 .andExpect(jsonPath("$.items[0].success").value(true));
+        assertThat(auditCount("REDISTRIBUTION_EXECUTED")).isEqualTo(1);
     }
 
     private UUID seedTask(

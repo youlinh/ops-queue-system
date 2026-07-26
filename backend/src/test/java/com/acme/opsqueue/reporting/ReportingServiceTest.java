@@ -39,7 +39,7 @@ class ReportingServiceTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void resetFixture() {
-        jdbc.execute("TRUNCATE TABLE audit_logs");
+        truncateAuditLogs();
         jdbc.update("DELETE FROM notification_events");
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");

@@ -49,7 +49,7 @@ class RosterApiTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.execute("TRUNCATE TABLE audit_logs");
+        truncateAuditLogs();
         batches.deleteAll();
         users.deleteAll();
         createUser("leader", Set.of(RoleName.LEADER));
