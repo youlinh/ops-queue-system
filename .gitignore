@@ -1,3 +1,6 @@
 .superpowers/
 .worktrees/
 outputs/
+backend/target/
+frontend/node_modules/
+frontend/dist/
