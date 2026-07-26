@@ -112,6 +112,7 @@ class TaskQueryApiTest extends MySqlIntegrationTest {
     void systemNameSuggestionsAreDistinctEscapedCappedAndRoleScoped() throws Exception {
         seedTask(developer, operator, "VERSION_RELEASE", "Bill%ing", "PENDING", START);
         seedTask(developer, operator, "VERSION_RELEASE", "Bill%ing", "PENDING", START.plusSeconds(3600));
+        seedTask(developer, operator, "VERSION_RELEASE", "Billing Own", "PENDING", START.plusSeconds(5400));
         seedTask(otherDeveloper, operator, "VERSION_RELEASE", "Billing Other", "PENDING", START.plusSeconds(7200));
         for (int index = 0; index < 25; index++) {
             seedTask(developer, operator, "VERSION_RELEASE", "Alpha-" + index, "PENDING", START.plusSeconds(10800L + index));
@@ -121,6 +122,15 @@ class TaskQueryApiTest extends MySqlIntegrationTest {
                         .with(authentication(authenticationFor(developer))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0]").value("Bill%ing"));
+        mvc.perform(get("/api/tasks/system-names").param("query", "Billing")
+                        .with(authentication(authenticationFor(developer))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0]").value("Billing Own"));
+        mvc.perform(get("/api/tasks/system-names").param("query", "Billing")
+                        .with(authentication(authenticationFor(operator))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0]").value("Billing Other"))
+                .andExpect(jsonPath("$[1]").value("Billing Own"));
         mvc.perform(get("/api/tasks/system-names").param("query", "Alpha").param("limit", "99")
                         .with(authentication(authenticationFor(developer))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(20));
@@ -167,6 +177,12 @@ class TaskQueryApiTest extends MySqlIntegrationTest {
                         .with(authentication(authenticationFor(operator))))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_TASK_REQUEST"));
         mvc.perform(get("/api/tasks").param("page", "-1").with(authentication(authenticationFor(operator))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_TASK_REQUEST"));
+        mvc.perform(get("/api/tasks").param("page", "21474836").param("size", "100")
+                        .with(authentication(authenticationFor(operator))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.page").value(21474836));
+        mvc.perform(get("/api/tasks").param("page", "21474837").param("size", "100")
+                        .with(authentication(authenticationFor(operator))))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_TASK_REQUEST"));
     }
 

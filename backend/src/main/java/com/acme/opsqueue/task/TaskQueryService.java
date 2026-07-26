@@ -20,6 +20,7 @@ public class TaskQueryService {
     private static final int DEFAULT_PAGE = 0;
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 100;
+    private static final long MAX_OFFSET = Integer.MAX_VALUE;
     private static final int DEFAULT_SUGGESTION_LIMIT = 10;
     private static final int MAX_SUGGESTION_LIMIT = 20;
 
@@ -32,6 +33,7 @@ public class TaskQueryService {
     public TaskPage<TaskRow> search(TaskQuery query, CurrentUser currentUser) {
         int page = normalizePage(query.page());
         int size = normalizeSize(query.size());
+        long offset = offset(page, size);
         List<Object> params = new ArrayList<>();
         String where = whereClause(query, currentUser, params);
         Long total = jdbc.queryForObject(
@@ -40,7 +42,7 @@ public class TaskQueryService {
                 params.toArray());
         List<Object> rowParams = new ArrayList<>(params);
         rowParams.add(size);
-        rowParams.add(page * size);
+        rowParams.add(offset);
         List<TaskRow> content = jdbc.query("""
                         SELECT %s
                         FROM tasks t
@@ -191,6 +193,14 @@ public class TaskQueryService {
     private int normalizeSize(int size) {
         int normalized = size <= 0 ? DEFAULT_SIZE : size;
         return Math.min(normalized, MAX_SIZE);
+    }
+
+    private long offset(int page, int size) {
+        long offset = (long) page * size;
+        if (offset > MAX_OFFSET) {
+            throw TaskLifecycleException.invalidRequest("Page offset is too large");
+        }
+        return offset;
     }
 
     private String orderBy(String sort) {
