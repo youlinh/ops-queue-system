@@ -76,6 +76,13 @@ public class SecurityConfiguration {
                         .hasRole(RoleName.LEADER.name())
                         .requestMatchers("/api/rosters/**")
                         .hasRole(RoleName.LEADER.name())
+                        .requestMatchers(
+                                "/api/assignments/tasks/*/adjust",
+                                "/api/assignments/redistribution/**",
+                                "/api/unavailability/**")
+                        .hasRole(RoleName.LEADER.name())
+                        .requestMatchers("/api/assignments/tasks/*/transfer")
+                        .authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/tasks")
                         .hasRole(RoleName.DEVELOPER.name())
                         .requestMatchers("/api/tasks/*/call", "/api/tasks/*/complete")

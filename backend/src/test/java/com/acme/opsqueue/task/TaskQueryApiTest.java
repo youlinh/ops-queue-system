@@ -164,6 +164,26 @@ class TaskQueryApiTest extends MySqlIntegrationTest {
     }
 
     @Test
+    void taskCenterRowsAndDetailExposeManualAttentionFlag() throws Exception {
+        Task pending = seedTask(
+                developer, operator, "VERSION_RELEASE", "Billing",
+                "PENDING", START);
+        jdbc.update("""
+                UPDATE tasks SET needs_manual_attention = TRUE
+                WHERE id = UUID_TO_BIN(?)
+                """, pending.id().toString());
+
+        mvc.perform(get("/api/tasks")
+                        .with(authentication(authenticationFor(operator))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].needsManualAttention").value(true));
+        mvc.perform(get("/api/tasks/{id}", pending.id())
+                        .with(authentication(authenticationFor(operator))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.needsManualAttention").value(true));
+    }
+
+    @Test
     void queryEndpointsRequireAuthenticationAndCreateRemainsDeveloperOnly() throws Exception {
         mvc.perform(get("/api/tasks")).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/tasks").with(csrf()).with(authentication(authenticationFor(operator)))

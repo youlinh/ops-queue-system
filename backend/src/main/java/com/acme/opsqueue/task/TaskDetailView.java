@@ -23,6 +23,7 @@ public record TaskDetailView(
         boolean canCall,
         boolean canComplete,
         boolean canTransfer,
+        boolean needsManualAttention,
         Instant createdAt,
         Instant calledAt,
         UUID calledByUserId,

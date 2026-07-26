@@ -93,6 +93,7 @@ public class TaskQueryService {
                             task.canCall(),
                             task.canComplete(),
                             task.canTransfer(),
+                            task.needsManualAttention(),
                             task.createdAt(),
                             instant(result.getObject("called_at", LocalDateTime.class)),
                             uuid(result.getString("called_by_user_id")),
@@ -226,7 +227,7 @@ public class TaskQueryService {
                     THEN TIMESTAMPDIFF(MINUTE, t.actual_start_at, t.actual_end_at)
                     ELSE NULL
                 END actual_minutes,
-                t.auto_assignment_rule, t.created_at
+                t.auto_assignment_rule, t.needs_manual_attention, t.created_at
                 """;
     }
 
@@ -254,6 +255,7 @@ public class TaskQueryService {
                 assignee && "PENDING".equals(status),
                 assignee && "IN_PROGRESS".equals(status),
                 assignee && !"COMPLETED".equals(status),
+                result.getBoolean("needs_manual_attention"),
                 instant(result.getObject("created_at", LocalDateTime.class)));
     }
 
@@ -327,6 +329,7 @@ public class TaskQueryService {
             boolean canCall,
             boolean canComplete,
             boolean canTransfer,
+            boolean needsManualAttention,
             Instant createdAt) {
     }
 }
