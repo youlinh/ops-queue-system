@@ -73,6 +73,7 @@ class TaskLifecycleServiceTest extends MySqlIntegrationTest {
     @BeforeEach
     void resetFixture() {
         reset(objectMapper);
+        jdbc.update("DELETE FROM audit_logs");
         jdbc.update("DELETE FROM notification_events");
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");

@@ -96,6 +96,7 @@ class IdentityApiTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void removeAccountsCreatedByPreviousTests() {
+        jdbc.update("DELETE FROM audit_logs");
         springSecurityFilterChain.getFilters("/api/auth/csrf").stream()
                 .filter(CsrfFilter.class::isInstance)
                 .map(CsrfFilter.class::cast)

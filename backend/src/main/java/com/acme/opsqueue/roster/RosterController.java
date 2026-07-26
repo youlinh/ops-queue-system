@@ -1,9 +1,12 @@
 package com.acme.opsqueue.roster;
 
+import com.acme.opsqueue.audit.AuditService;
 import com.acme.opsqueue.identity.CurrentUser;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.data.domain.Page;
@@ -23,15 +26,21 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequestMapping("/api/rosters")
 public class RosterController {
     private static final String XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private final RosterImportService rosterImports;
+    private final AuditService audits;
+    private final Clock clock;
 
-    public RosterController(RosterImportService rosterImports) {
+    public RosterController(
+            RosterImportService rosterImports, AuditService audits, Clock clock) {
         this.rosterImports = rosterImports;
+        this.audits = audits;
+        this.clock = clock;
     }
 
     @GetMapping("/template")
@@ -55,9 +64,14 @@ public class RosterController {
     }
 
     @PostMapping("/imports/{batchId}/confirm")
+    @Transactional
     public ResponseEntity<Void> confirm(@PathVariable UUID batchId,
             @AuthenticationPrincipal CurrentUser currentUser) {
         rosterImports.confirm(batchId, currentUser.id());
+        audits.recordCurrentRequest(
+                currentUser.id(), "ROSTER_CONFIRMED", "ROSTER_IMPORT", batchId,
+                Map.of("status", "VALIDATED"), Map.of("status", "IMPORTED"),
+                clock.instant());
         return ResponseEntity.noContent().build();
     }
 

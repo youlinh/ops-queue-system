@@ -1,5 +1,7 @@
 package com.acme.opsqueue.identity;
 
+import com.acme.opsqueue.audit.AuditService;
+import java.time.Clock;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -215,7 +217,9 @@ class IdentityServiceConcurrencyTest {
                 identities,
                 mock(JwtCookieService.class),
                 new ClientIpResolver(""),
-                CookieCsrfTokenRepository.withHttpOnlyFalse());
+                CookieCsrfTokenRepository.withHttpOnlyFalse(),
+                mock(AuditService.class),
+                Clock.systemUTC());
         CountDownLatch start = new CountDownLatch(1);
         List<Future<Integer>> results = new ArrayList<>();
 

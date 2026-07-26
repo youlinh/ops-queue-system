@@ -1,5 +1,6 @@
 package com.acme.opsqueue.task;
 
+import com.acme.opsqueue.audit.AuditService;
 import com.acme.opsqueue.identity.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -10,6 +11,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequestMapping("/api/tasks")
@@ -29,16 +32,19 @@ public class TaskController {
     private final TaskLifecycleService lifecycle;
     private final TaskQueryService taskQueries;
     private final Clock clock;
+    private final AuditService audits;
 
     public TaskController(
             CreateTaskService taskCreation,
             TaskLifecycleService lifecycle,
             TaskQueryService taskQueries,
-            Clock clock) {
+            Clock clock,
+            AuditService audits) {
         this.taskCreation = taskCreation;
         this.lifecycle = lifecycle;
         this.taskQueries = taskQueries;
         this.clock = clock;
+        this.audits = audits;
     }
 
     @GetMapping
@@ -84,21 +90,41 @@ public class TaskController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @Transactional
     public CreatedTask create(
             @AuthenticationPrincipal CurrentUser creator,
             @Valid @RequestBody CreateTaskRequest request) {
-        return taskCreation.create(
-                request.toCommand(), creator.id(), clock.instant());
+        Instant at = clock.instant();
+        CreatedTask created =
+                taskCreation.create(request.toCommand(), creator.id(), at);
+        audits.recordCurrentRequest(
+                creator.id(), "TASK_CREATED", "TASK", created.id(), Map.of(),
+                Map.of(
+                        "ticketNumber", created.ticketNumber(),
+                        "assigneeId", created.assigneeId(),
+                        "status", "PENDING",
+                        "assignmentRule", created.assignmentRule().name()),
+                at);
+        return created;
     }
 
     @PostMapping("/{id}/call")
+    @Transactional
     public TaskView call(
             @PathVariable UUID id,
             @AuthenticationPrincipal CurrentUser actor) {
-        return lifecycle.call(id, actor.id(), clock.instant());
+        Instant at = clock.instant();
+        TaskView task = lifecycle.call(id, actor.id(), at);
+        audits.recordCurrentRequest(
+                actor.id(), "TASK_CALLED", "TASK", id,
+                Map.of("status", "PENDING"),
+                Map.of("status", task.status(), "assigneeId", task.currentAssigneeId()),
+                at);
+        return task;
     }
 
     @PostMapping("/{id}/complete")
+    @Transactional
     public TaskView complete(
             @PathVariable UUID id,
             @AuthenticationPrincipal CurrentUser actor,
@@ -106,7 +132,18 @@ public class TaskController {
         if (request == null || request.actualMinutes() == null) {
             throw TaskLifecycleException.invalidDuration();
         }
-        return lifecycle.complete(id, actor.id(), request.actualMinutes(), clock.instant());
+        Instant at = clock.instant();
+        TaskView task =
+                lifecycle.complete(id, actor.id(), request.actualMinutes(), at);
+        audits.recordCurrentRequest(
+                actor.id(), "TASK_COMPLETED", "TASK", id,
+                Map.of("status", "IN_PROGRESS"),
+                Map.of(
+                        "status", task.status(),
+                        "assigneeId", task.currentAssigneeId(),
+                        "actualMinutes", task.actualMinutes()),
+                at);
+        return task;
     }
 
     public record CreateTaskRequest(

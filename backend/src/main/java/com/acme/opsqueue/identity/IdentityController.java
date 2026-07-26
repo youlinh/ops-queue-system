@@ -1,5 +1,6 @@
 package com.acme.opsqueue.identity;
 
+import com.acme.opsqueue.audit.AuditService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -7,6 +8,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.time.Clock;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -21,6 +25,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequestMapping("/api")
@@ -29,16 +34,22 @@ public class IdentityController {
     private final JwtCookieService jwtCookies;
     private final ClientIpResolver clientIps;
     private final CookieCsrfTokenRepository csrfTokens;
+    private final AuditService audits;
+    private final Clock clock;
 
     public IdentityController(
             IdentityService identities,
             JwtCookieService jwtCookies,
             ClientIpResolver clientIps,
-            CookieCsrfTokenRepository csrfTokens) {
+            CookieCsrfTokenRepository csrfTokens,
+            AuditService audits,
+            Clock clock) {
         this.identities = identities;
         this.jwtCookies = jwtCookies;
         this.clientIps = clientIps;
         this.csrfTokens = csrfTokens;
+        this.audits = audits;
+        this.clock = clock;
     }
 
     @PostMapping("/auth/login")
@@ -47,9 +58,14 @@ public class IdentityController {
             HttpServletRequest servletRequest,
             HttpServletResponse servletResponse) {
         try {
+            String sourceIp = clientIps.resolve(servletRequest);
             CurrentUser currentUser = identities.authenticate(
-                    request.username(), request.password(), clientIps.resolve(servletRequest));
+                    request.username(), request.password(), sourceIp);
             jwtCookies.issue(servletResponse, currentUser.id());
+            audits.record(
+                    currentUser.id(), "LOGIN_SUCCESS", "USER", currentUser.id(),
+                    Map.of(), Map.of("username", currentUser.username()),
+                    sourceIp, clock.instant());
             return ResponseEntity.ok(currentUser);
         } catch (IdentityService.LoginRateLimitedException exception) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).build();
@@ -88,35 +104,65 @@ public class IdentityController {
     }
 
     @PostMapping("/admin/users")
+    @Transactional
     public ResponseEntity<AccountView> createUser(
+            @AuthenticationPrincipal CurrentUser leader,
             @Valid @RequestBody CreateUserRequest request) {
         UserAccount created = identities.create(
                 request.username(),
                 request.displayName(),
                 request.initialPassword(),
                 request.roles());
+        audits.recordCurrentRequest(
+                leader.id(), "ACCOUNT_CREATED", "USER", created.id(), Map.of(),
+                Map.of(
+                        "username", created.username(),
+                        "enabled", created.enabled(),
+                        "roles", roleNames(created.roles())),
+                clock.instant());
         return ResponseEntity.status(HttpStatus.CREATED).body(AccountView.from(created));
     }
 
     @PostMapping("/admin/users/{id}/disable")
-    public ResponseEntity<Void> disable(@PathVariable UUID id) {
+    @Transactional
+    public ResponseEntity<Void> disable(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CurrentUser leader) {
         identities.disable(id);
+        audits.recordCurrentRequest(
+                leader.id(), "ACCOUNT_DISABLED", "USER", id,
+                Map.of("enabled", true), Map.of("enabled", false), clock.instant());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/admin/users/{id}/reset-password")
+    @Transactional
     public ResponseEntity<Void> resetPassword(
             @PathVariable UUID id,
+            @AuthenticationPrincipal CurrentUser leader,
             @Valid @RequestBody ResetPasswordRequest request) {
         identities.resetPassword(id, request.initialPassword());
+        audits.recordCurrentRequest(
+                leader.id(), "ACCOUNT_PASSWORD_RESET", "USER", id, Map.of(),
+                Map.of("passwordReset", true), clock.instant());
         return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/admin/users/{id}/roles")
+    @Transactional
     public AccountView replaceRoles(
             @PathVariable UUID id,
+            @AuthenticationPrincipal CurrentUser leader,
             @Valid @RequestBody ReplaceRolesRequest request) {
-        return AccountView.from(identities.replaceRoles(id, request.roles()));
+        UserAccount updated = identities.replaceRoles(id, request.roles());
+        audits.recordCurrentRequest(
+                leader.id(), "ACCOUNT_ROLES_CHANGED", "USER", id, Map.of(),
+                Map.of("roles", roleNames(updated.roles())), clock.instant());
+        return AccountView.from(updated);
+    }
+
+    private List<String> roleNames(Set<RoleName> roles) {
+        return roles.stream().map(Enum::name).sorted().toList();
     }
 
     public record LoginRequest(
