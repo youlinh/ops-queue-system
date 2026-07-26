@@ -1,0 +1,9 @@
+.git
+.superpowers
+**/node_modules
+**/dist
+**/target
+**/.idea
+**/.vscode
+*.log
+.env

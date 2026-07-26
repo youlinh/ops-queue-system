@@ -1,0 +1,85 @@
+name: ${COMPOSE_PROJECT_NAME:-opsqueue}
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    command:
+      - --log-bin-trust-function-creators=1
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_USER: ${DB_RUNTIME_USER}
+      MYSQL_PASSWORD: ${DB_RUNTIME_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./deploy/mysql-runtime-grants.sh:/docker-entrypoint-initdb.d/10-runtime-grants.sh:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME}
+      DB_RUNTIME_USER: ${DB_RUNTIME_USER}
+      DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD}
+      DB_MIGRATION_USER: root
+      DB_MIGRATION_PASSWORD: ${DB_ROOT_PASSWORD}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
+      BOOTSTRAP_LEADER_USERNAME: ${BOOTSTRAP_LEADER_USERNAME}
+      BOOTSTRAP_LEADER_DISPLAY_NAME: ${BOOTSTRAP_LEADER_DISPLAY_NAME}
+      BOOTSTRAP_LEADER_PASSWORD: ${BOOTSTRAP_LEADER_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - http://127.0.0.1:8080/actuator/health
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --spider
+        - http://127.0.0.1:8080/healthz
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  mysql_data:
