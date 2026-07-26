@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -75,7 +76,7 @@ public class SecurityConfiguration {
                         .hasRole(RoleName.LEADER.name())
                         .requestMatchers("/api/rosters/**")
                         .hasRole(RoleName.LEADER.name())
-                        .requestMatchers("/api/tasks")
+                        .requestMatchers(HttpMethod.POST, "/api/tasks")
                         .hasRole(RoleName.DEVELOPER.name())
                         .requestMatchers("/api/tasks/*/call", "/api/tasks/*/complete")
                         .authenticated()

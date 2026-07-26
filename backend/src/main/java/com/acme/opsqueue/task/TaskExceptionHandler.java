@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice(assignableTypes = TaskController.class)
@@ -12,6 +13,7 @@ public class TaskExceptionHandler {
     @ExceptionHandler({
             InvalidTaskRequestException.class,
             MethodArgumentNotValidException.class,
+            MethodArgumentTypeMismatchException.class,
             HttpMessageNotReadableException.class
     })
     ResponseEntity<ErrorResponse> invalidRequest(Exception exception) {
@@ -63,6 +65,7 @@ public class TaskExceptionHandler {
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "INVALID_ACTUAL_MINUTES",
                     exception.getMessage());
+            case INVALID_REQUEST -> error(HttpStatus.BAD_REQUEST, "INVALID_TASK_REQUEST", exception.getMessage());
         };
     }
 

@@ -8,10 +8,15 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -22,15 +27,59 @@ import org.springframework.web.bind.annotation.RestController;
 public class TaskController {
     private final CreateTaskService taskCreation;
     private final TaskLifecycleService lifecycle;
+    private final TaskQueryService taskQueries;
     private final Clock clock;
 
     public TaskController(
             CreateTaskService taskCreation,
             TaskLifecycleService lifecycle,
+            TaskQueryService taskQueries,
             Clock clock) {
         this.taskCreation = taskCreation;
         this.lifecycle = lifecycle;
+        this.taskQueries = taskQueries;
         this.clock = clock;
+    }
+
+    @GetMapping
+    public TaskPage<TaskQueryService.TaskRow> search(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestParam(required = false) LocalDate operationDate,
+            @RequestParam(required = false) TaskCategory category,
+            @RequestParam(required = false) String systemName,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID creatorId,
+            @RequestParam(required = false) UUID assigneeId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort) {
+        return taskQueries.search(
+                new TaskQuery(
+                        operationDate,
+                        category,
+                        systemName,
+                        status,
+                        creatorId,
+                        assigneeId,
+                        page,
+                        size,
+                        sort),
+                currentUser);
+    }
+
+    @GetMapping("/system-names")
+    public List<String> systemNames(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) Integer limit) {
+        return taskQueries.systemNames(query, limit, currentUser);
+    }
+
+    @GetMapping("/{id}")
+    public TaskDetailView detail(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CurrentUser currentUser) {
+        return taskQueries.detail(id, currentUser);
     }
 
     @PostMapping
@@ -44,14 +93,14 @@ public class TaskController {
 
     @PostMapping("/{id}/call")
     public TaskView call(
-            @PathVariable java.util.UUID id,
+            @PathVariable UUID id,
             @AuthenticationPrincipal CurrentUser actor) {
         return lifecycle.call(id, actor.id(), clock.instant());
     }
 
     @PostMapping("/{id}/complete")
     public TaskView complete(
-            @PathVariable java.util.UUID id,
+            @PathVariable UUID id,
             @AuthenticationPrincipal CurrentUser actor,
             @RequestBody CompleteTaskRequest request) {
         if (request == null || request.actualMinutes() == null) {

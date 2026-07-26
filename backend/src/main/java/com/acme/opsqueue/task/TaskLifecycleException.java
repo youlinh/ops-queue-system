@@ -1,7 +1,7 @@
 package com.acme.opsqueue.task;
 
 public class TaskLifecycleException extends RuntimeException {
-    public enum Reason { NOT_FOUND, FORBIDDEN, CONFLICT, INVALID_DURATION }
+    public enum Reason { NOT_FOUND, FORBIDDEN, CONFLICT, INVALID_DURATION, INVALID_REQUEST }
 
     private final Reason reason;
 
@@ -24,6 +24,10 @@ public class TaskLifecycleException extends RuntimeException {
 
     public static TaskLifecycleException invalidDuration() {
         return new TaskLifecycleException(Reason.INVALID_DURATION, "Actual minutes must be positive");
+    }
+
+    public static TaskLifecycleException invalidRequest(String message) {
+        return new TaskLifecycleException(Reason.INVALID_REQUEST, message);
     }
 
     public Reason reason() {
