@@ -8,6 +8,7 @@ import PlaceholderPage from '@/pages/PlaceholderPage.vue'
 import TaskCreatePage from '@/features/tasks/TaskCreatePage.vue'
 import TaskDetailPage from '@/features/tasks/TaskDetailPage.vue'
 import TaskQueuePage from '@/features/tasks/TaskQueuePage.vue'
+import RosterImportPage from '@/features/roster/RosterImportPage.vue'
 import {
   createRouter,
   createWebHistory,
@@ -114,7 +115,11 @@ export const routes: RouteRecordRaw[] = [
           roles: ['DEVELOPER', 'OPERATOR', 'LEADER'],
         },
       },
-      placeholders('rosters', '值班管理', ['LEADER']),
+      {
+        path: 'rosters',
+        component: RosterImportPage,
+        meta: { title: '值班管理', roles: ['LEADER'] },
+      },
       placeholders('people', '人员与可用性', ['LEADER']),
       placeholders('reports', '统计', ['OPERATOR', 'LEADER']),
       placeholders('audit', '审计日志', ['LEADER']),

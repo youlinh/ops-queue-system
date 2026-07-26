@@ -985,6 +985,128 @@ a {
   color: #7b8799;
 }
 
+.management-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+}
+
+.roster-import-panel,
+.import-history-panel {
+  padding: 30px;
+}
+
+.template-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.file-drop {
+  display: grid;
+  min-height: 126px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  margin: 24px 0;
+  border: 1px dashed #afbac8;
+  color: #38475d;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.file-drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.file-drop strong {
+  font-size: 13px;
+}
+
+.file-drop span {
+  color: #8a95a6;
+  font-size: 10px;
+}
+
+.import-errors {
+  margin: 18px 0;
+  padding: 16px 18px;
+  border-left: 3px solid #d48a47;
+  color: #76502f;
+  background: #fff8ef;
+  font-size: 11px;
+}
+
+.import-errors ul {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding-left: 20px;
+}
+
+.roster-preview-table {
+  min-width: 600px;
+  border: 1px solid #e4e8ee;
+}
+
+.success-message {
+  color: #287957;
+  font-size: 12px;
+}
+
+.import-history-panel h3 {
+  margin: 0 0 20px;
+  color: var(--navy);
+}
+
+.history-list {
+  display: grid;
+}
+
+.history-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 0;
+  border-bottom: 1px solid #e9edf2;
+}
+
+.history-list strong,
+.history-list span {
+  display: block;
+}
+
+.history-list strong {
+  color: #38465b;
+  font-size: 11px;
+}
+
+.history-list div span {
+  margin-top: 5px;
+  color: #929ba9;
+  font-size: 9px;
+}
+
+.import-IMPORTED {
+  color: #287957;
+  background: #e6f6ef;
+}
+
+.import-VALIDATED {
+  color: #245eac;
+  background: #e8f1ff;
+}
+
+.import-FAILED {
+  color: #9e433e;
+  background: #fbe9e7;
+}
+
 @media (max-width: 1120px) {
   .duty-today {
     display: none;
@@ -1024,7 +1146,8 @@ a {
   }
 
   .task-create-layout,
-  .task-detail-layout {
+  .task-detail-layout,
+  .management-layout {
     grid-template-columns: 1fr;
   }
 

@@ -106,6 +106,15 @@ class RosterImportServiceTest extends MySqlIntegrationTest {
 
         assertThat(preview.valid()).isTrue();
         assertThat(preview.batchId()).isNotNull();
+        assertThat(preview.rows()).containsExactly(
+                new RosterImportPreviewRow(
+                        2, LocalDate.parse("2026-07-25"),
+                        users.findByUsername("ops1").orElseThrow().id(), "ops1",
+                        users.findByUsername("ops2").orElseThrow().id(), "ops2"),
+                new RosterImportPreviewRow(
+                        3, LocalDate.parse("2026-07-26"),
+                        users.findByUsername("ops2").orElseThrow().id(), "ops2",
+                        users.findByUsername("ops3").orElseThrow().id(), "ops3"));
         RosterImportBatch batch = batches.findByIdWithRows(preview.batchId()).orElseThrow();
         assertThat(batch.status()).isEqualTo(RosterImportBatch.Status.VALIDATED);
         assertThat(batch.fileSha256()).matches("[0-9a-f]{64}");

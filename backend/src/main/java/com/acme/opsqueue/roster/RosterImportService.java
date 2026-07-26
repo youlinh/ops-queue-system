@@ -42,13 +42,15 @@ public class RosterImportService {
         RosterExcelParser.ParsedWorkbook parsed = parser.parse(bytes);
         if (!parsed.errors().isEmpty()) {
             RosterImportBatch failed = persistFailure(originalFilename, bytes, uploaderId, parsed.observedRowCount(), parsed.coveredDates(), parsed.errors());
-            return new RosterImportPreview(failed.id(), false, parsed.errors());
+            return new RosterImportPreview(
+                    failed.id(), false, parsed.errors(), List.of());
         }
         Map<String, UserAccount> accounts = accountsByUsername(parsed.rows());
         List<RosterImportError> errors = validate(parsed.rows(), accounts);
         if (!errors.isEmpty()) {
             RosterImportBatch failed = persistFailure(originalFilename, bytes, uploaderId, parsed.observedRowCount(), parsed.coveredDates(), errors);
-            return new RosterImportPreview(failed.id(), false, errors);
+            return new RosterImportPreview(
+                    failed.id(), false, errors, List.of());
         }
         RosterImportBatch batch = RosterImportBatch.validated(
                 safeFilename(originalFilename), sha256(bytes), uploaderId);
@@ -59,7 +61,23 @@ public class RosterImportService {
         }
         batch.finishStaging();
         batches.saveAndFlush(batch);
-        return new RosterImportPreview(batch.id(), true, List.of());
+        List<RosterImportPreviewRow> previewRows = parsed.rows().stream()
+                .map(row -> {
+                    UserAccount second =
+                            accounts.get(normalize(row.secondLineUsername()));
+                    UserAccount third =
+                            accounts.get(normalize(row.thirdLineUsername()));
+                    return new RosterImportPreviewRow(
+                            row.sourceRowNumber(),
+                            row.parseDate(),
+                            second.id(),
+                            second.displayName(),
+                            third.id(),
+                            third.displayName());
+                })
+                .toList();
+        return new RosterImportPreview(
+                batch.id(), true, List.of(), previewRows);
     }
 
     private RosterImportBatch persistFailure(String originalFilename, byte[] bytes, UUID uploaderId,
