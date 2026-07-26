@@ -13,6 +13,12 @@ spring:
       ddl-auto: validate
   jackson:
     time-zone: UTC
+  servlet:
+    multipart:
+      # Above the roster parser's own 1 MB cap so oversized uploads reach its
+      # clean rejection path; Spring only guards against grossly large bodies.
+      max-file-size: 2MB
+      max-request-size: 3MB
 
 management:
   endpoints:

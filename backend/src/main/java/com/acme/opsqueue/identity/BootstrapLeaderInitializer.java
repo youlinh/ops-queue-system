@@ -1,5 +1,6 @@
 package com.acme.opsqueue.identity;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -12,6 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class BootstrapLeaderInitializer implements ApplicationRunner {
+    private static final int MIN_PASSWORD_LENGTH = 12;
+    private static final int MAX_PASSWORD_UTF8_BYTES = 72;
+
     private final UserAccountRepository users;
     private final PasswordEncoder passwordEncoder;
     private final String username;
@@ -47,6 +51,17 @@ public class BootstrapLeaderInitializer implements ApplicationRunner {
             throw new IllegalStateException(
                     "No leader exists; required bootstrap values are blank: "
                             + String.join(", ", missing));
+        }
+        if (password.length() < MIN_PASSWORD_LENGTH
+                || password.getBytes(StandardCharsets.UTF_8).length
+                        > MAX_PASSWORD_UTF8_BYTES) {
+            throw new IllegalStateException(
+                    "BOOTSTRAP_LEADER_PASSWORD must contain at least "
+                            + MIN_PASSWORD_LENGTH
+                            + " characters and at most "
+                            + MAX_PASSWORD_UTF8_BYTES
+                            + " UTF-8 bytes, matching the password policy "
+                            + "enforced for every other account");
         }
 
         String normalizedUsername = UserAccount.normalizeUsername(username);

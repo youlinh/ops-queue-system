@@ -20,7 +20,7 @@ function Invoke-Checked(
 Push-Location $repoRoot
 try {
     Invoke-Checked "Backend tests" {
-        & mvn -f backend/pom.xml "-Dapi.version=1.44" test
+        & mvn -f backend/pom.xml test
     }
     Invoke-Checked "Frontend unit tests" {
         & corepack pnpm --dir frontend test --run

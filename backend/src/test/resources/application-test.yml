@@ -12,6 +12,9 @@ ops:
   audit:
     reconciliation:
       enabled: false
+  notification:
+    retention:
+      enabled: false
 
 JWT_SIGNING_KEY: test-profile-signing-key-with-at-least-32-bytes
 JWT_COOKIE_SECURE: false

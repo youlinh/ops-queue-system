@@ -15,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TaskLifecycleService {
+    /** One full day; longer completions indicate a typo rather than real work. */
+    static final int MAX_ACTUAL_MINUTES = 1440;
+
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
 
@@ -45,7 +48,7 @@ public class TaskLifecycleService {
 
     @Transactional
     public TaskView complete(UUID taskId, UUID actorId, int actualMinutes, Instant completedAt) {
-        if (actualMinutes <= 0) {
+        if (actualMinutes <= 0 || actualMinutes > MAX_ACTUAL_MINUTES) {
             throw TaskLifecycleException.invalidDuration();
         }
         TaskRecord task = requireTask(taskId);

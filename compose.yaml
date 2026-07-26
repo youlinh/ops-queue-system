@@ -40,6 +40,11 @@ services:
       DB_MIGRATION_PASSWORD: ${DB_ROOT_PASSWORD}
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
       JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
+      # The API only ever sees the web (nginx) container as its TCP peer, so the
+      # X-Forwarded-For header it sets must be trusted for audit logs and login
+      # throttling to record real client IPs. The API port is never published, so
+      # trusting the private ranges is safe here; override if your topology differs.
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       BOOTSTRAP_LEADER_USERNAME: ${BOOTSTRAP_LEADER_USERNAME}
       BOOTSTRAP_LEADER_DISPLAY_NAME: ${BOOTSTRAP_LEADER_DISPLAY_NAME}
       BOOTSTRAP_LEADER_PASSWORD: ${BOOTSTRAP_LEADER_PASSWORD}

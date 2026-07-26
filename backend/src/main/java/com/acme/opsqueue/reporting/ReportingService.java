@@ -39,7 +39,7 @@ public class ReportingService {
         Metrics metrics = jdbc.queryForObject("""
                 SELECT COUNT(*) total_count,
                        COALESCE(SUM(status = 'PENDING'), 0) pending_count,
-                       COALESCE(SUM(status IN ('CALLED', 'IN_PROGRESS')), 0) in_progress_count,
+                       COALESCE(SUM(status = 'IN_PROGRESS'), 0) in_progress_count,
                        COALESCE(SUM(status = 'COMPLETED'), 0) completed_count,
                        COALESCE(SUM(estimated_minutes), 0) estimated_minutes,
                        COALESCE(SUM(CASE
@@ -73,7 +73,7 @@ public class ReportingService {
         Metrics metrics = jdbc.queryForObject("""
                 SELECT COUNT(*) total_count,
                        COALESCE(SUM(status = 'PENDING'), 0) pending_count,
-                       COALESCE(SUM(status IN ('CALLED', 'IN_PROGRESS')), 0) in_progress_count,
+                       COALESCE(SUM(status = 'IN_PROGRESS'), 0) in_progress_count,
                        COALESCE(SUM(status = 'COMPLETED'), 0) completed_count,
                        COALESCE(SUM(estimated_minutes), 0) estimated_minutes,
                        COALESCE(SUM(CASE

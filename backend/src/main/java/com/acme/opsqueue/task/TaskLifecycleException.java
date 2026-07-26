@@ -23,7 +23,10 @@ public class TaskLifecycleException extends RuntimeException {
     }
 
     public static TaskLifecycleException invalidDuration() {
-        return new TaskLifecycleException(Reason.INVALID_DURATION, "Actual minutes must be positive");
+        return new TaskLifecycleException(
+                Reason.INVALID_DURATION,
+                "Actual minutes must be between 1 and "
+                        + TaskLifecycleService.MAX_ACTUAL_MINUTES);
     }
 
     public static TaskLifecycleException invalidRequest(String message) {

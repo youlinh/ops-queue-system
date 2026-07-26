@@ -274,6 +274,10 @@ class TaskLifecycleServiceTest extends MySqlIntegrationTest {
                 .andExpect(status().isUnprocessableEntity());
         mvc.perform(post("/api/tasks/{id}/complete", pending)
                         .with(csrf()).with(authentication(authenticationFor(assigneePrincipal)))
+                        .contentType(APPLICATION_JSON).content("{\"actualMinutes\":1441}"))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(post("/api/tasks/{id}/complete", pending)
+                        .with(csrf()).with(authentication(authenticationFor(assigneePrincipal)))
                         .contentType(APPLICATION_JSON).content("{\"actualMinutes\":10}"))
                 .andExpect(status().isConflict());
         assertThat(jdbc.queryForObject(

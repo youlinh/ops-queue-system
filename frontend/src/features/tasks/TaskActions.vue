@@ -59,8 +59,12 @@ async function runCall(): Promise<void> {
 
 async function runComplete(): Promise<void> {
   errorMessage.value = ''
-  if (!actualMinutes.value || actualMinutes.value <= 0) {
-    errorMessage.value = '实际耗时必须大于 0'
+  if (
+    !actualMinutes.value
+    || actualMinutes.value <= 0
+    || actualMinutes.value > 1440
+  ) {
+    errorMessage.value = '实际耗时需在 1 到 1440 分钟之间'
     return
   }
   submitting.value = true
@@ -163,6 +167,7 @@ function open(next: 'complete' | 'transfer'): void {
               data-testid="actual-minutes"
               type="number"
               min="1"
+              max="1440"
             />
           </label>
         </template>

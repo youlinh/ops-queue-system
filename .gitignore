@@ -8,3 +8,7 @@ frontend/playwright/.auth/
 frontend/playwright-report/
 frontend/test-results/
 work/
+.env
+.env.*
+!.env.example
+!.env.e2e.example

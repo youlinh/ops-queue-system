@@ -4,6 +4,7 @@ import { useAuthStore } from '@/features/auth/auth.store'
 import type { Role } from '@/features/auth/auth.types'
 import { taskCounts as fetchTaskCounts } from '@/features/tasks/task.api'
 import { shanghaiDate } from '@/features/tasks/shanghai-time'
+import NotificationToasts from '@/features/notifications/NotificationToasts.vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import RoleNavigation from './RoleNavigation.vue'
@@ -196,5 +197,7 @@ async function signOut(): Promise<void> {
         <RouterView />
       </main>
     </div>
+
+    <NotificationToasts v-if="user" />
   </div>
 </template>
