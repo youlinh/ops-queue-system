@@ -9,6 +9,9 @@ import TaskCreatePage from '@/features/tasks/TaskCreatePage.vue'
 import TaskDetailPage from '@/features/tasks/TaskDetailPage.vue'
 import TaskQueuePage from '@/features/tasks/TaskQueuePage.vue'
 import RosterImportPage from '@/features/roster/RosterImportPage.vue'
+import PeoplePage from '@/features/people/PeoplePage.vue'
+import ReportingPage from '@/features/reporting/ReportingPage.vue'
+import AuditLogPage from '@/features/audit/AuditLogPage.vue'
 import {
   createRouter,
   createWebHistory,
@@ -120,9 +123,21 @@ export const routes: RouteRecordRaw[] = [
         component: RosterImportPage,
         meta: { title: '值班管理', roles: ['LEADER'] },
       },
-      placeholders('people', '人员与可用性', ['LEADER']),
-      placeholders('reports', '统计', ['OPERATOR', 'LEADER']),
-      placeholders('audit', '审计日志', ['LEADER']),
+      {
+        path: 'people',
+        component: PeoplePage,
+        meta: { title: '人员与可用性', roles: ['LEADER'] },
+      },
+      {
+        path: 'reports',
+        component: ReportingPage,
+        meta: { title: '统计', roles: ['OPERATOR', 'LEADER'] },
+      },
+      {
+        path: 'audit',
+        component: AuditLogPage,
+        meta: { title: '审计日志', roles: ['LEADER'] },
+      },
       {
         path: '403',
         component: ForbiddenPage,

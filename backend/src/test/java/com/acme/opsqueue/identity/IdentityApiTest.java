@@ -657,6 +657,25 @@ class IdentityApiTest extends MySqlIntegrationTest {
         assertThat(auditCount("ACCOUNT_DISABLED")).isEqualTo(1);
     }
 
+    @Test
+    void leaderListsEnabledAndDisabledAccountsWithoutPasswordData() throws Exception {
+        UserAccount disabled = createUser(
+                "disabled-account",
+                "Disabled-Password-1",
+                Set.of(RoleName.OPERATOR),
+                false);
+        disabled.disable();
+        users.saveAndFlush(disabled);
+        Cookie leader = readyBootstrapLeaderCookie();
+
+        mvc.perform(get("/api/admin/users").cookie(leader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].enabled").value(true))
+                .andExpect(jsonPath("$[?(@.username == 'disabled-account')].enabled")
+                        .value(org.hamcrest.Matchers.contains(false)))
+                .andExpect(jsonPath("$[0].passwordHash").doesNotExist());
+    }
+
     private int auditCount(String action) {
         return jdbc.queryForObject(
                 "SELECT COUNT(*) FROM audit_logs WHERE action = ?",

@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -113,6 +114,16 @@ public class IdentityService {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "Username already exists", exception);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserAccount> listAccounts() {
+        return users.findAll().stream()
+                .sorted(Comparator
+                        .comparing(UserAccount::enabled).reversed()
+                        .thenComparing(UserAccount::displayName)
+                        .thenComparing(UserAccount::username))
+                .toList();
     }
 
     void afterUsernameAvailabilityCheck(String normalizedUsername) {

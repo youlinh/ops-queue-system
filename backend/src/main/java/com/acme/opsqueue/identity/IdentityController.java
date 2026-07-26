@@ -123,6 +123,11 @@ public class IdentityController {
         return ResponseEntity.status(HttpStatus.CREATED).body(AccountView.from(created));
     }
 
+    @GetMapping("/admin/users")
+    public List<AccountView> users() {
+        return identities.listAccounts().stream().map(AccountView::from).toList();
+    }
+
     @PostMapping("/admin/users/{id}/disable")
     @Transactional
     public ResponseEntity<Void> disable(
