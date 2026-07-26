@@ -185,6 +185,38 @@ class TaskQueryApiTest extends MySqlIntegrationTest {
     }
 
     @Test
+    void taskCountsAggregateTheWholeVisibleOperationDate() throws Exception {
+        Task pending = seedTask(
+                developer, operator, "VERSION_RELEASE", "Billing",
+                "PENDING", START);
+        seedTask(
+                developer, operator, "DATA_MAINTENANCE", "Ledger",
+                "IN_PROGRESS", START.plusSeconds(3600));
+        seedTask(
+                otherDeveloper, operator, "VERSION_RELEASE", "Payments",
+                "PENDING", START.plusSeconds(7200));
+        jdbc.update("""
+                UPDATE tasks SET needs_manual_attention = TRUE
+                WHERE id = UUID_TO_BIN(?)
+                """, pending.id().toString());
+
+        mvc.perform(get("/api/tasks/counts")
+                        .param("operationDate", "2026-07-25")
+                        .with(authentication(authenticationFor(operator))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pending").value(2))
+                .andExpect(jsonPath("$.inProgress").value(1))
+                .andExpect(jsonPath("$.manualAttention").value(1));
+        mvc.perform(get("/api/tasks/counts")
+                        .param("operationDate", "2026-07-25")
+                        .with(authentication(authenticationFor(developer))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pending").value(1))
+                .andExpect(jsonPath("$.inProgress").value(1))
+                .andExpect(jsonPath("$.manualAttention").value(1));
+    }
+
+    @Test
     void queryEndpointsRequireAuthenticationAndCreateRemainsDeveloperOnly() throws Exception {
         mvc.perform(get("/api/tasks")).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/tasks").with(csrf()).with(authentication(authenticationFor(operator)))

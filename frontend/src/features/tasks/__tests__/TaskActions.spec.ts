@@ -109,4 +109,23 @@ describe('TaskActions', () => {
     expect(wrapper.find('[data-testid="complete-task"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="transfer-task"]').exists()).toBe(false)
   })
+
+  it('shows transfer warnings returned by the server', async () => {
+    vi.mocked(taskApi.transferTask).mockResolvedValue({
+      taskId: 'task-1',
+      previousAssigneeId: operatorId,
+      assigneeId: 'operator-2',
+      warnings: ['目标人员是次日值班人员'],
+      version: 1,
+    })
+    const wrapper = mountActions(task())
+    await wrapper.get('[data-testid="transfer-task"]').trigger('click')
+    await wrapper.get('[data-testid="transfer-target"]').setValue('operator-2')
+    await wrapper.get('[data-testid="transfer-reason"]').setValue('临时调整')
+    await wrapper.get('[data-testid="confirm-transfer"]').trigger('click')
+
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain('目标人员是次日值班人员'),
+    )
+  })
 })

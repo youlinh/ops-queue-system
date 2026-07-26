@@ -81,6 +81,13 @@ public class TaskController {
         return taskQueries.systemNames(query, limit, currentUser);
     }
 
+    @GetMapping("/counts")
+    public TaskQueryService.TaskCounts counts(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestParam LocalDate operationDate) {
+        return taskQueries.counts(operationDate, currentUser);
+    }
+
     @GetMapping("/{id}")
     public TaskDetailView detail(
             @PathVariable UUID id,

@@ -67,10 +67,11 @@ public class AssignmentController {
         return result;
     }
 
-    @GetMapping("/api/assignments/operators")
+    @GetMapping("/api/assignments/tasks/{taskId}/operators")
     public List<AssignmentService.OperatorOption> operators(
-            @RequestParam LocalDate operationDate) {
-        return assignments.operatorDirectory(operationDate);
+            @PathVariable UUID taskId,
+            @AuthenticationPrincipal CurrentUser actor) {
+        return assignments.operatorDirectory(taskId, actor.id());
     }
 
     @GetMapping("/api/assignments/redistribution/preview")

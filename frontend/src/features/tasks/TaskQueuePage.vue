@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/app/http'
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import {
+  computed,
+  onMounted,
+  onUnmounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue'
 import { useRouter } from 'vue-router'
 import { searchTasks } from './task.api'
+import { shanghaiDate } from './shanghai-time'
 import TaskFilters from './TaskFilters.vue'
 import {
   categoryLabels,
@@ -17,44 +25,50 @@ const props = withDefaults(defineProps<{ dashboard?: boolean }>(), {
 const router = useRouter()
 const loading = ref(false)
 const errorMessage = ref('')
-const page = ref<TaskPage>({
+const emptyPage = (): TaskPage => ({
   content: [],
   page: 0,
   size: 20,
   totalElements: 0,
   totalPages: 0,
 })
+const page = ref<TaskPage>(emptyPage())
+let requestSequence = 0
+let dateTimer: ReturnType<typeof setInterval> | null = null
+let activeShanghaiDate = shanghaiDate()
 
-function shanghaiDate(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-}
-
-const initialDate = props.dashboard ? shanghaiDate() : ''
 const search = reactive<TaskSearch>({
-  operationDate: initialDate,
+  operationDate: props.dashboard ? activeShanghaiDate : '',
   category: '',
   systemName: '',
   status: '',
+  creatorId: '',
+  assigneeId: '',
   page: 0,
   size: 20,
 })
 const heading = computed(() => props.dashboard ? '今日任务队列' : '任务中心')
 
 async function load(next: TaskSearch = search): Promise<void> {
+  const request = ++requestSequence
   loading.value = true
   errorMessage.value = ''
   Object.assign(search, next)
+  const query = cleanSearch({ ...search })
   try {
-    page.value = await searchTasks(cleanSearch(search))
+    const result = await searchTasks(query)
+    if (request === requestSequence) {
+      page.value = result
+    }
   } catch (error: unknown) {
-    errorMessage.value = apiErrorMessage(error, '任务列表加载失败')
+    if (request === requestSequence) {
+      page.value = emptyPage()
+      errorMessage.value = apiErrorMessage(error, '任务列表加载失败')
+    }
   } finally {
-    loading.value = false
+    if (request === requestSequence) {
+      loading.value = false
+    }
   }
 }
 
@@ -72,10 +86,12 @@ function applyFilters(filters: TaskSearch): void {
 
 function resetFilters(): void {
   load({
-    operationDate: initialDate,
+    operationDate: props.dashboard ? shanghaiDate() : '',
     category: '',
     systemName: '',
     status: '',
+    creatorId: '',
+    assigneeId: '',
     page: 0,
     size: 20,
   })
@@ -101,8 +117,20 @@ const reload = () => load()
 onMounted(() => {
   load()
   window.addEventListener('ops-task-changed', reload)
+  dateTimer = setInterval(() => {
+    const current = shanghaiDate()
+    if (current !== activeShanghaiDate) {
+      activeShanghaiDate = current
+      if (props.dashboard) resetFilters()
+    }
+  }, 60_000)
 })
-onUnmounted(() => window.removeEventListener('ops-task-changed', reload))
+watch(() => props.dashboard, resetFilters)
+onUnmounted(() => {
+  requestSequence++
+  window.removeEventListener('ops-task-changed', reload)
+  if (dateTimer) clearInterval(dateTimer)
+})
 </script>
 
 <template>

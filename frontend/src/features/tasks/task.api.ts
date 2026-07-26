@@ -1,10 +1,12 @@
 import { http, unsafeRequest } from '@/app/http'
 import type {
+  AssignmentResult,
   CreatedTask,
   CreateTaskCommand,
   OperatorOption,
   TaskDetail,
   TaskPage,
+  TaskCounts,
   TaskSearch,
 } from './task.types'
 
@@ -61,18 +63,26 @@ export async function transferTask(
   id: string,
   targetId: string,
   reason: string,
-): Promise<void> {
-  await unsafeRequest({
+): Promise<AssignmentResult> {
+  const response = await unsafeRequest<AssignmentResult>({
     method: 'post',
     url: `/assignments/tasks/${id}/transfer`,
     data: { targetId, reason },
   })
+  return response.data
 }
 
 export async function listOperators(
-  operationDate: string,
+  taskId: string,
 ): Promise<OperatorOption[]> {
-  const response = await http.get<OperatorOption[]>('/assignments/operators', {
+  const response = await http.get<OperatorOption[]>(
+    `/assignments/tasks/${taskId}/operators`,
+  )
+  return response.data
+}
+
+export async function taskCounts(operationDate: string): Promise<TaskCounts> {
+  const response = await http.get<TaskCounts>('/tasks/counts', {
     params: { operationDate },
   })
   return response.data

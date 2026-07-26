@@ -2,7 +2,8 @@
 import { apiErrorMessage } from '@/app/http'
 import { useAuthStore } from '@/features/auth/auth.store'
 import type { Role } from '@/features/auth/auth.types'
-import { searchTasks } from '@/features/tasks/task.api'
+import { taskCounts as fetchTaskCounts } from '@/features/tasks/task.api'
+import { shanghaiDate } from '@/features/tasks/shanghai-time'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import RoleNavigation from './RoleNavigation.vue'
@@ -15,6 +16,9 @@ const mobileOpen = ref(false)
 const duty = ref<DutySummary | null>(null)
 const dutyError = ref('')
 const signingOut = ref(false)
+const now = ref(new Date())
+let dateTimer: ReturnType<typeof setInterval> | null = null
+let activeShanghaiDate = shanghaiDate(now.value)
 const taskCounts = ref({
   PENDING: null as number | null,
   IN_PROGRESS: null as number | null,
@@ -28,45 +32,41 @@ const roleLabels: Record<Role, string> = {
 }
 const user = computed(() => auth.user)
 const pageTitle = computed(() => route.meta.title || '工作台')
-const todayLabel = new Intl.DateTimeFormat('zh-CN', {
+const todayLabel = computed(() => new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
   month: 'long',
   day: 'numeric',
   weekday: 'short',
-}).format(new Date())
+}).format(now.value))
 
-function shanghaiDate(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
+async function loadDuty(): Promise<void> {
+  dutyError.value = ''
+  try {
+    duty.value = await todayDuty()
+  } catch (error: unknown) {
+    duty.value = null
+    dutyError.value = apiErrorMessage(error, '今日值班信息加载失败')
+  }
+}
+
+function scheduleDateCalibration(): void {
+  dateTimer = setInterval(() => {
+    const current = shanghaiDate()
+    if (current !== activeShanghaiDate) {
+      activeShanghaiDate = current
+      now.value = new Date()
+      loadTaskCounts()
+      loadDuty()
+    }
+  }, 60_000)
 }
 
 async function loadTaskCounts(): Promise<void> {
   try {
-    const [pending, inProgress] = await Promise.all([
-      searchTasks({
-        operationDate: shanghaiDate(),
-        status: 'PENDING',
-        page: 0,
-        size: 100,
-      }),
-      searchTasks({
-        operationDate: shanghaiDate(),
-        status: 'IN_PROGRESS',
-        page: 0,
-        size: 100,
-      }),
-    ])
-    taskCounts.value.PENDING = pending.totalElements
-    taskCounts.value.IN_PROGRESS = inProgress.totalElements
-    const fullyLoaded = pending.totalElements <= pending.content.length
-      && inProgress.totalElements <= inProgress.content.length
-    taskCounts.value.manualAttention = fullyLoaded
-      ? [...pending.content, ...inProgress.content]
-        .filter((task) => task.needsManualAttention).length
-      : null
+    const counts = await fetchTaskCounts(shanghaiDate())
+    taskCounts.value.PENDING = counts.pending
+    taskCounts.value.IN_PROGRESS = counts.inProgress
+    taskCounts.value.manualAttention = counts.manualAttention
   } catch {
     taskCounts.value = {
       PENDING: null,
@@ -79,15 +79,13 @@ async function loadTaskCounts(): Promise<void> {
 onMounted(async () => {
   window.addEventListener('ops-task-changed', loadTaskCounts)
   loadTaskCounts()
-  try {
-    duty.value = await todayDuty()
-  } catch (error: unknown) {
-    dutyError.value = apiErrorMessage(error, '今日值班信息加载失败')
-  }
+  loadDuty()
+  scheduleDateCalibration()
 })
-onUnmounted(() =>
-  window.removeEventListener('ops-task-changed', loadTaskCounts),
-)
+onUnmounted(() => {
+  window.removeEventListener('ops-task-changed', loadTaskCounts)
+  if (dateTimer) clearInterval(dateTimer)
+})
 
 async function signOut(): Promise<void> {
   signingOut.value = true

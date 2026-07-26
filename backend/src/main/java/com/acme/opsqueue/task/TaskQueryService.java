@@ -134,6 +134,30 @@ public class TaskQueryService {
                 params.toArray());
     }
 
+    public TaskCounts counts(java.time.LocalDate operationDate, CurrentUser currentUser) {
+        if (operationDate == null) {
+            throw TaskLifecycleException.invalidRequest("Operation date is required");
+        }
+        List<Object> params = new ArrayList<>();
+        String where = whereClause(
+                new TaskQuery(operationDate, null, null, null, null, null, 0, 1, null),
+                currentUser,
+                params);
+        return jdbc.queryForObject("""
+                        SELECT
+                            COALESCE(SUM(t.status = 'PENDING'), 0) pending_count,
+                            COALESCE(SUM(t.status = 'IN_PROGRESS'), 0) in_progress_count,
+                            COALESCE(SUM(t.needs_manual_attention = TRUE), 0) manual_count
+                        FROM tasks t
+                        %s
+                        """.formatted(where),
+                (result, row) -> new TaskCounts(
+                        result.getLong("pending_count"),
+                        result.getLong("in_progress_count"),
+                        result.getLong("manual_count")),
+                params.toArray());
+    }
+
     private String whereClause(TaskQuery query, CurrentUser currentUser, List<Object> params) {
         List<String> predicates = new ArrayList<>();
         if (query.operationDate() != null) {
@@ -331,5 +355,8 @@ public class TaskQueryService {
             boolean canTransfer,
             boolean needsManualAttention,
             Instant createdAt) {
+    }
+
+    public record TaskCounts(long pending, long inProgress, long manualAttention) {
     }
 }

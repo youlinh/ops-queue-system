@@ -90,6 +90,20 @@ export interface OperatorOption {
   available: boolean
 }
 
+export interface AssignmentResult {
+  taskId: string
+  previousAssigneeId: string
+  assigneeId: string
+  warnings: string[]
+  version: number
+}
+
+export interface TaskCounts {
+  pending: number
+  inProgress: number
+  manualAttention: number
+}
+
 export interface TaskActionContext {
   currentUserId: string
   roles: readonly Role[]
@@ -107,11 +121,12 @@ export const statusLabels: Record<TaskStatus, string> = {
 }
 
 const ruleLabels: Record<string, string> = {
+  LATE_SAME_DAY_SECOND: '21 点后当天二线优先',
+  LATE_SAME_DAY_THIRD: '21 点后当天转三线',
   DAY_SECOND: '白天二线优先',
-  DAY_THIRD_FALLBACK: '白天转三线',
-  EVENING_SECOND: '晚间优先二线',
-  EVENING_THIRD: '晚间转三线',
-  AFTER_21_SECOND: '21 点后当天二线优先',
+  DAY_THIRD: '白天转三线',
+  AFTER_HOURS_SECOND: '晚间优先二线',
+  AFTER_HOURS_THIRD: '晚间转三线',
   FAIR: '公平分配',
   MANUAL_TRANSFER: '管理员转交',
   LEADER_ADJUSTMENT: '组长调整',

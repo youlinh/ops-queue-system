@@ -15,6 +15,7 @@ const props = defineProps<{
   currentUserId: string
   roles: readonly Role[]
   operators: OperatorOption[]
+  operatorDirectoryError?: string
 }>()
 const emit = defineEmits<{ changed: [] }>()
 
@@ -24,6 +25,7 @@ const targetId = ref('')
 const reason = ref('')
 const submitting = ref(false)
 const errorMessage = ref('')
+const successMessage = ref('')
 
 const operationalRole = computed(() =>
   props.roles.includes('OPERATOR') || props.roles.includes('LEADER'),
@@ -82,7 +84,12 @@ async function runTransfer(): Promise<void> {
 
   submitting.value = true
   try {
-    await transferTask(props.task.id, targetId.value, reason.value.trim())
+    const result = await transferTask(
+      props.task.id,
+      targetId.value,
+      reason.value.trim(),
+    )
+    successMessage.value = result.warnings.join('；') || '任务已转交'
     dialog.value = null
     changed()
   } catch (error: unknown) {
@@ -99,6 +106,7 @@ function changed(): void {
 
 function open(next: 'complete' | 'transfer'): void {
   errorMessage.value = ''
+  successMessage.value = ''
   dialog.value = next
 }
 </script>
@@ -129,6 +137,8 @@ function open(next: 'complete' | 'transfer'): void {
       data-testid="transfer-task"
       class="action-button"
       type="button"
+      :disabled="submitting || Boolean(operatorDirectoryError)"
+      :title="operatorDirectoryError || undefined"
       @click="open('transfer')"
     >
       转交
@@ -136,6 +146,9 @@ function open(next: 'complete' | 'transfer'): void {
 
     <p v-if="errorMessage && !dialog" class="form-error" role="alert">
       {{ errorMessage }}
+    </p>
+    <p v-if="successMessage && !dialog" class="form-success" role="status">
+      {{ successMessage }}
     </p>
 
     <div v-if="dialog" class="dialog-backdrop">

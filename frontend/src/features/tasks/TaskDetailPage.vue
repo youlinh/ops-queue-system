@@ -19,16 +19,9 @@ const task = ref<TaskDetail | null>(null)
 const operators = ref<OperatorOption[]>([])
 const loading = ref(false)
 const errorMessage = ref('')
+const operatorError = ref('')
 const id = computed(() => String(route.params.id))
-
-function operationDate(value: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(value))
-}
+let requestSequence = 0
 
 function formatDateTime(value: string | null): string {
   if (!value) return '—'
@@ -44,26 +37,58 @@ function formatDateTime(value: string | null): string {
 }
 
 async function load(): Promise<void> {
+  const request = ++requestSequence
+  const requestedId = id.value
   loading.value = true
   errorMessage.value = ''
+  operatorError.value = ''
+  task.value = null
+  operators.value = []
   try {
-    task.value = await taskDetail(id.value)
-    const roles = auth.user?.roles || []
-    if (roles.includes('OPERATOR') || roles.includes('LEADER')) {
+    const result = await taskDetail(requestedId)
+    if (request !== requestSequence) return
+    task.value = result
+    if (result.canTransfer) {
       try {
-        operators.value = await listOperators(
-          operationDate(task.value.operationStart),
-        )
-      } catch {
-        operators.value = []
+        const options = await listOperators(requestedId)
+        if (request === requestSequence) {
+          operators.value = options
+        }
+      } catch (error: unknown) {
+        if (request === requestSequence) {
+          operatorError.value = apiErrorMessage(
+            error,
+            '转交管理员目录加载失败，请重试',
+          )
+        }
       }
-    } else {
-      operators.value = []
     }
   } catch (error: unknown) {
-    errorMessage.value = apiErrorMessage(error, '任务详情加载失败')
+    if (request === requestSequence) {
+      task.value = null
+      errorMessage.value = apiErrorMessage(error, '任务详情加载失败')
+    }
   } finally {
-    loading.value = false
+    if (request === requestSequence) {
+      loading.value = false
+    }
+  }
+}
+
+async function retryOperators(): Promise<void> {
+  if (!task.value?.canTransfer) return
+  const request = requestSequence
+  operatorError.value = ''
+  try {
+    const options = await listOperators(task.value.id)
+    if (request === requestSequence) operators.value = options
+  } catch (error: unknown) {
+    if (request === requestSequence) {
+      operatorError.value = apiErrorMessage(
+        error,
+        '转交管理员目录加载失败，请重试',
+      )
+    }
   }
 }
 
@@ -118,8 +143,15 @@ watch(id, load)
         :current-user-id="auth.user.id"
         :roles="auth.user.roles"
         :operators="operators"
+        :operator-directory-error="operatorError"
         @changed="load"
       />
+      <p v-if="operatorError" class="form-error" role="alert">
+        {{ operatorError }}
+        <button class="text-button" type="button" @click="retryOperators">
+          重新加载
+        </button>
+      </p>
     </section>
 
     <aside class="content-panel timeline-panel">

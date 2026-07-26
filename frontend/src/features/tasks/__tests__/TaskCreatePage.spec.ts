@@ -69,12 +69,16 @@ describe('TaskCreatePage', () => {
       id: 'task-1',
       ticketNumber: 'OPS-20260725-0001',
       assigneeId: 'operator-1',
-      assignmentRule: 'EVENING_SECOND',
+      assignmentRule: 'AFTER_HOURS_SECOND',
     })
     const wrapper = mountPage()
     await fillValidForm(wrapper)
     await wrapper.get('[data-testid="submit-task"]').trigger('click')
     await vi.waitFor(() => expect(taskApi.createTask).toHaveBeenCalledOnce())
+    expect(taskApi.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      operationStart: '2026-07-25T20:00:00+08:00',
+      operationEnd: '2026-07-25T20:45:00+08:00',
+    }))
 
     expect(wrapper.text()).toContain('OPS-20260725-0001')
     expect(wrapper.text()).toContain('operator-1')

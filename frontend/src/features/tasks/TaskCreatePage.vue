@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/app/http'
-import { computed, reactive, ref } from 'vue'
+import { computed, onUnmounted, reactive, ref } from 'vue'
 import {
   assignmentRuleLabel,
   categoryLabels,
@@ -12,6 +12,7 @@ import {
   notifyTaskChanged,
   suggestSystemNames,
 } from './task.api'
+import { toShanghaiInstant } from './shanghai-time'
 
 const form = reactive({
   category: 'VERSION_RELEASE' as TaskCategory,
@@ -26,6 +27,7 @@ const errorMessage = ref('')
 const result = ref<CreatedTask | null>(null)
 const suggestions = ref<string[]>([])
 let suggestionTimer: ReturnType<typeof setTimeout> | null = null
+let suggestionRequest = 0
 
 const processLabel = computed(() =>
   form.category === 'VERSION_RELEASE'
@@ -47,14 +49,15 @@ function validate(): string {
   if (!form.operationStart || !form.operationEnd) {
     return '请选择完整的操作时间范围'
   }
-  if (new Date(form.operationEnd).getTime()
-      <= new Date(form.operationStart).getTime()) {
+  if (new Date(toShanghaiInstant(form.operationEnd)).getTime()
+      <= new Date(toShanghaiInstant(form.operationStart)).getTime()) {
     return '操作结束时间必须晚于开始时间'
   }
   return ''
 }
 
 function scheduleSuggestions(): void {
+  const request = ++suggestionRequest
   if (suggestionTimer) {
     clearTimeout(suggestionTimer)
   }
@@ -63,13 +66,24 @@ function scheduleSuggestions(): void {
     return
   }
   suggestionTimer = setTimeout(async () => {
+    const query = form.systemName
     try {
-      suggestions.value = await suggestSystemNames(form.systemName)
+      const result = await suggestSystemNames(query)
+      if (request === suggestionRequest) {
+        suggestions.value = result
+      }
     } catch {
-      suggestions.value = []
+      if (request === suggestionRequest) {
+        suggestions.value = []
+      }
     }
   }, 250)
 }
+
+onUnmounted(() => {
+  suggestionRequest++
+  if (suggestionTimer) clearTimeout(suggestionTimer)
+})
 
 async function submit(): Promise<void> {
   errorMessage.value = validate()
@@ -84,8 +98,8 @@ async function submit(): Promise<void> {
       systemName: form.systemName.trim(),
       estimatedMinutes: Number(form.estimatedMinutes),
       processNumber: form.processNumber.trim(),
-      operationStart: new Date(form.operationStart).toISOString(),
-      operationEnd: new Date(form.operationEnd).toISOString(),
+      operationStart: toShanghaiInstant(form.operationStart),
+      operationEnd: toShanghaiInstant(form.operationEnd),
     })
     notifyTaskChanged()
   } catch (error: unknown) {

@@ -25,6 +25,8 @@ function reset(): void {
     category: '',
     systemName: '',
     status: '',
+    creatorId: '',
+    assigneeId: '',
   })
   emit('reset')
 }
@@ -68,6 +70,20 @@ function reset(): void {
         v-model="filters.systemName"
         maxlength="128"
         placeholder="输入关键字"
+      />
+    </label>
+    <label>
+      <span>创建人 ID</span>
+      <input
+        v-model="filters.creatorId"
+        placeholder="按创建人筛选"
+      />
+    </label>
+    <label>
+      <span>负责人 ID</span>
+      <input
+        v-model="filters.assigneeId"
+        placeholder="按负责人筛选"
       />
     </label>
     <button class="action-button action-button--primary" type="submit">

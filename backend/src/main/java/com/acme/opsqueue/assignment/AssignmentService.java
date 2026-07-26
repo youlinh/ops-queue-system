@@ -125,10 +125,16 @@ public class AssignmentService {
     }
 
     @Transactional(readOnly = true)
-    public List<OperatorOption> operatorDirectory(LocalDate operationDate) {
-        if (operationDate == null) {
-            throw AssignmentValidationException.invalidRequest(
-                    "Operation date is required");
+    public List<OperatorOption> operatorDirectory(UUID taskId, UUID actorId) {
+        TaskAssignmentRecord task = readTask(taskId);
+        UserAccount actor = users.findById(actorId)
+                .orElseThrow(() -> AssignmentValidationException.forbidden(
+                        "Only the current assignee or a leader can view transfer candidates"));
+        if (!actor.enabled()
+                || (!actor.hasRole(RoleName.LEADER)
+                && !task.currentAssigneeId().equals(actor.id()))) {
+            throw AssignmentValidationException.forbidden(
+                    "Only the current assignee or a leader can view transfer candidates");
         }
         return jdbc.query("""
                 SELECT BIN_TO_UUID(u.id) id, u.display_name,
@@ -148,7 +154,7 @@ public class AssignmentService {
                         UUID.fromString(result.getString("id")),
                         result.getString("display_name"),
                         result.getBoolean("available")),
-                operationDate);
+                task.operationDate());
     }
 
     void requireLeader(UUID actorId) {
@@ -300,6 +306,14 @@ public class AssignmentService {
     }
 
     private TaskAssignmentRecord lockTask(UUID taskId) {
+        return readTask(taskId, true);
+    }
+
+    private TaskAssignmentRecord readTask(UUID taskId) {
+        return readTask(taskId, false);
+    }
+
+    private TaskAssignmentRecord readTask(UUID taskId, boolean forUpdate) {
         if (taskId == null) {
             throw AssignmentValidationException.notFound("Task was not found");
         }
@@ -309,8 +323,8 @@ public class AssignmentService {
                        status, version
                 FROM tasks
                 WHERE id = UUID_TO_BIN(?)
-                FOR UPDATE
-                """,
+                %s
+                """.formatted(forUpdate ? "FOR UPDATE" : ""),
                 (result, row) -> new TaskAssignmentRecord(
                         UUID.fromString(result.getString("id")),
                         result.getString("ticket_number"),

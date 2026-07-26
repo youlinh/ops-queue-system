@@ -278,20 +278,21 @@ class AssignmentServiceTest extends MySqlIntegrationTest {
     }
 
     @Test
-    void operatorDirectoryIsRoleScopedAndMarksOperationDateAvailability()
+    void operatorDirectoryIsTaskScopedAndMarksOperationDateAvailability()
             throws Exception {
+        UUID taskId = seedTask("PENDING", assignee.id());
         service.setUnavailable(
                 target.id(), OPERATION_DATE, "conflict", leader.id(), NOW);
 
-        mvc.perform(get("/api/assignments/operators")
-                        .param("operationDate", OPERATION_DATE.toString()))
+        mvc.perform(get("/api/assignments/tasks/{taskId}/operators", taskId))
                 .andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/assignments/operators")
-                        .param("operationDate", OPERATION_DATE.toString())
+        mvc.perform(get("/api/assignments/tasks/{taskId}/operators", taskId)
                         .with(authentication(auth(developer))))
                 .andExpect(status().isForbidden());
-        mvc.perform(get("/api/assignments/operators")
-                        .param("operationDate", OPERATION_DATE.toString())
+        mvc.perform(get("/api/assignments/tasks/{taskId}/operators", taskId)
+                        .with(authentication(auth(otherOperator))))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/assignments/tasks/{taskId}/operators", taskId)
                         .with(authentication(auth(assignee))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == '%s')].available"
@@ -301,6 +302,9 @@ class AssignmentServiceTest extends MySqlIntegrationTest {
                         .formatted(assignee.id()))
                         .value(org.hamcrest.Matchers.contains(
                                 assignee.displayName())));
+        mvc.perform(get("/api/assignments/tasks/{taskId}/operators", taskId)
+                        .with(authentication(auth(leader))))
+                .andExpect(status().isOk());
     }
 
     private int auditCount(String action) {
