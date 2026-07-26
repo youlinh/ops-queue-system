@@ -1,5 +1,6 @@
 package com.acme.opsqueue.assignment;
 
+import com.acme.opsqueue.audit.AuditService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -7,22 +8,33 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 public class RedistributionService {
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(RedistributionService.class);
     private final JdbcTemplate jdbc;
     private final AssignmentService assignments;
     private final RedistributionItemTransaction itemTransaction;
+    private final RedistributionAuditTransaction auditTransactions;
+    private final AuditService audits;
 
     public RedistributionService(
             JdbcTemplate jdbc,
             AssignmentService assignments,
-            RedistributionItemTransaction itemTransaction) {
+            RedistributionItemTransaction itemTransaction,
+            RedistributionAuditTransaction auditTransactions,
+            AuditService audits) {
         this.jdbc = jdbc;
         this.assignments = assignments;
         this.itemTransaction = itemTransaction;
+        this.auditTransactions = auditTransactions;
+        this.audits = audits;
     }
 
     public List<RedistributionTask> previewRedistribution(
@@ -67,12 +79,19 @@ public class RedistributionService {
         }
         List<RedistributionTask> pending =
                 previewRedistribution(operatorId, date, leaderId);
+        UUID auditCommandId = auditTransactions.begin(
+                leaderId,
+                operatorId,
+                date,
+                pending.size(),
+                audits.currentSourceIp(),
+                at);
         List<RedistributionItemResult> results = new ArrayList<>(pending.size());
         for (RedistributionTask task : pending) {
             try {
                 results.add(itemTransaction.execute(
                         task.taskId(), operatorId, date, leaderId,
-                        normalizedReason, at));
+                        normalizedReason, at, auditCommandId));
             } catch (RuntimeException exception) {
                 boolean marked = itemTransaction.markManualAttention(
                         task.taskId(), operatorId, date, at);
@@ -85,6 +104,14 @@ public class RedistributionService {
                         marked,
                         "Task redistribution failed"));
             }
+        }
+        try {
+            auditTransactions.finalizeCommand(auditCommandId);
+        } catch (DataAccessException exception) {
+            LOGGER.error(
+                    "Redistribution {} completed with a pending audit command",
+                    auditCommandId,
+                    exception);
         }
         return new RedistributionResult(operatorId, date, results);
     }

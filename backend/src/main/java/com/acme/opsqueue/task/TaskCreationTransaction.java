@@ -1,5 +1,6 @@
 package com.acme.opsqueue.task;
 
+import com.acme.opsqueue.audit.AuditService;
 import com.acme.opsqueue.identity.RoleName;
 import com.acme.opsqueue.identity.UserAccount;
 import com.acme.opsqueue.identity.UserAccountRepository;
@@ -40,18 +41,21 @@ public class TaskCreationTransaction {
     private final UserAccountRepository users;
     private final AutoAssignmentEngine assignmentEngine;
     private final ObjectMapper objectMapper;
+    private final AuditService audits;
 
     public TaskCreationTransaction(
             JdbcTemplate jdbc,
             DutyRosterRepository rosters,
             UserAccountRepository users,
             AutoAssignmentEngine assignmentEngine,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            AuditService audits) {
         this.jdbc = jdbc;
         this.rosters = rosters;
         this.users = users;
         this.assignmentEngine = assignmentEngine;
         this.objectMapper = objectMapper;
+        this.audits = audits;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -107,6 +111,14 @@ public class TaskCreationTransaction {
                 decision,
                 submittedAt);
         insertHistory(taskId, creatorId, decision, submittedAt);
+        audits.recordCurrentRequest(
+                creatorId, "TASK_CREATED", "TASK", taskId, Map.of(),
+                Map.of(
+                        "ticketNumber", ticketNumber,
+                        "assigneeId", decision.assigneeId(),
+                        "status", "PENDING",
+                        "assignmentRule", decision.rule().name()),
+                submittedAt);
         return new CreatedTask(
                 taskId, ticketNumber, decision.assigneeId(), decision.rule());
     }

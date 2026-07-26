@@ -1,5 +1,6 @@
 package com.acme.opsqueue.roster;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -48,7 +49,7 @@ class RosterApiTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.update("DELETE FROM audit_logs");
+        jdbc.execute("TRUNCATE TABLE audit_logs");
         batches.deleteAll();
         users.deleteAll();
         createUser("leader", Set.of(RoleName.LEADER));
@@ -98,6 +99,9 @@ class RosterApiTest extends MySqlIntegrationTest {
         mvc.perform(get("/api/rosters").cookie(leader))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].dutyDate").value("2026-07-25"));
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_logs WHERE action = 'ROSTER_CONFIRMED'",
+                Integer.class)).isEqualTo(1);
     }
 
     @Test

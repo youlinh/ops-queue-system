@@ -128,9 +128,18 @@ public class AuditService {
             Map<String, ?> before,
             Map<String, ?> after,
             Instant occurredAt) {
-        HttpServletRequest request = requests.getIfAvailable();
-        String sourceIp = request == null ? "" : clientIps.resolve(request);
-        record(actorId, action, objectType, objectId, before, after, sourceIp, occurredAt);
+        record(
+                actorId, action, objectType, objectId,
+                before, after, currentSourceIp(), occurredAt);
+    }
+
+    public String currentSourceIp() {
+        try {
+            HttpServletRequest request = requests.getIfAvailable();
+            return request == null ? "unknown" : clientIps.resolve(request);
+        } catch (IllegalStateException exception) {
+            return "unknown";
+        }
     }
 
     @Transactional(readOnly = true)

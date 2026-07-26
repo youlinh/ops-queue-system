@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,7 +47,7 @@ class AuditIntegrationTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void resetFixture() {
-        jdbc.update("DELETE FROM audit_logs");
+        jdbc.execute("TRUNCATE TABLE audit_logs");
         users.findAll().stream()
                 .filter(account -> !account.username().equals("test-bootstrap-leader"))
                 .forEach(users::delete);
@@ -82,6 +83,32 @@ class AuditIntegrationTest extends MySqlIntegrationTest {
         String summaries = row.get("before_json") + " " + row.get("after_json");
         assertThat(summaries).contains("passwordReset")
                 .doesNotContain("Reporting-Test-Password-1", "passwordHash", "jwt", "cookie", "secret");
+    }
+
+    @Test
+    void sourceIpFallsBackOutsideAnHttpRequest() throws InterruptedException {
+        AtomicReference<String> sourceIp = new AtomicReference<>();
+        Thread thread = Thread.startVirtualThread(
+                () -> sourceIp.set(audits.currentSourceIp()));
+        thread.join();
+
+        assertThat(sourceIp.get()).isEqualTo("unknown");
+    }
+
+    @Test
+    void databaseRejectsAuditUpdatesAndDeletes() {
+        audits.record(
+                leader.id(), "LOGIN_SUCCESS", "USER", leader.id(),
+                Map.of(), Map.of("username", leader.username()),
+                "192.0.2.8", Instant.now());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        jdbc.update("UPDATE audit_logs SET source_ip = 'changed'"))
+                .hasMessageContaining("audit_logs is append-only");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        jdbc.update("DELETE FROM audit_logs"))
+                .hasMessageContaining("audit_logs is append-only");
+        assertThat(countAuditRows()).isEqualTo(1);
     }
 
     @Test

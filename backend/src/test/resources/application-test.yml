@@ -8,6 +8,11 @@ spring:
       hibernate.query.fail_on_pagination_over_collection_fetch: true
       hibernate.session_factory.statement_inspector: com.acme.opsqueue.roster.SqlCaptureInspector
 
+ops:
+  audit:
+    reconciliation:
+      enabled: false
+
 JWT_SIGNING_KEY: test-profile-signing-key-with-at-least-32-bytes
 JWT_COOKIE_SECURE: false
 BOOTSTRAP_LEADER_USERNAME: test-bootstrap-leader

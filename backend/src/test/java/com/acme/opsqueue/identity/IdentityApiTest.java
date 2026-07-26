@@ -96,7 +96,7 @@ class IdentityApiTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void removeAccountsCreatedByPreviousTests() {
-        jdbc.update("DELETE FROM audit_logs");
+        jdbc.execute("TRUNCATE TABLE audit_logs");
         springSecurityFilterChain.getFilters("/api/auth/csrf").stream()
                 .filter(CsrfFilter.class::isInstance)
                 .map(CsrfFilter.class::cast)
@@ -650,6 +650,17 @@ class IdentityApiTest extends MySqlIntegrationTest {
                 RoleName.DEVELOPER, RoleName.OPERATOR);
         assertThat(passwordEncoder.matches(
                 "Managed-Reset-Password-1", managed.passwordHash())).isTrue();
+        assertThat(auditCount("ACCOUNT_CREATED")).isEqualTo(2);
+        assertThat(auditCount("ACCOUNT_ROLES_CHANGED")).isEqualTo(1);
+        assertThat(auditCount("ACCOUNT_PASSWORD_RESET")).isEqualTo(1);
+        assertThat(auditCount("ACCOUNT_DISABLED")).isEqualTo(1);
+    }
+
+    private int auditCount(String action) {
+        return jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_logs WHERE action = ?",
+                Integer.class,
+                action);
     }
 
     @Test

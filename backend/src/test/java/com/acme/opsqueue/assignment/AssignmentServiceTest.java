@@ -66,7 +66,7 @@ class AssignmentServiceTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void resetFixture() {
-        jdbc.update("DELETE FROM audit_logs");
+        jdbc.execute("TRUNCATE TABLE audit_logs");
         jdbc.update("DELETE FROM unavailability");
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");
@@ -270,6 +270,17 @@ class AssignmentServiceTest extends MySqlIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.assigneeId")
                         .value(otherOperator.id().toString()));
+        assertThat(auditCount("TASK_TRANSFERRED")).isEqualTo(1);
+        assertThat(auditCount("UNAVAILABILITY_CREATED")).isEqualTo(1);
+        assertThat(auditCount("UNAVAILABILITY_REMOVED")).isEqualTo(1);
+        assertThat(auditCount("TASK_LEADER_ADJUSTED")).isEqualTo(1);
+    }
+
+    private int auditCount(String action) {
+        return jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_logs WHERE action = ?",
+                Integer.class,
+                action);
     }
 
     private void assertReason(

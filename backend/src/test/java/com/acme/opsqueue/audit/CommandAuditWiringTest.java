@@ -51,7 +51,7 @@ class CommandAuditWiringTest {
     private final AuditService audits = mock(AuditService.class);
 
     @Test
-    void everyListedSuccessfulCommandEmitsExactlyOneActionLevelAudit() {
+    void controllerOwnedSuccessfulCommandsEmitExactlyOneActionLevelAudit() {
         CurrentUser leader = currentUser(RoleName.LEADER);
         CurrentUser operator = currentUser(RoleName.OPERATOR);
 
@@ -66,7 +66,7 @@ class CommandAuditWiringTest {
         assertThat(loginAction.getValue()).isEqualTo("LOGIN_SUCCESS");
 
         ArgumentCaptor<String> commandActions = ArgumentCaptor.forClass(String.class);
-        verify(audits, times(13)).recordCurrentRequest(
+        verify(audits, times(11)).recordCurrentRequest(
                 any(), commandActions.capture(), any(), any(), any(), any(), any());
         assertThat(commandActions.getAllValues()).containsExactlyInAnyOrder(
                 "ACCOUNT_CREATED",
@@ -74,14 +74,12 @@ class CommandAuditWiringTest {
                 "ACCOUNT_PASSWORD_RESET",
                 "ACCOUNT_ROLES_CHANGED",
                 "ROSTER_CONFIRMED",
-                "TASK_CREATED",
                 "TASK_CALLED",
                 "TASK_COMPLETED",
                 "TASK_TRANSFERRED",
                 "TASK_LEADER_ADJUSTED",
                 "UNAVAILABILITY_CREATED",
-                "UNAVAILABILITY_REMOVED",
-                "REDISTRIBUTION_EXECUTED");
+                "UNAVAILABILITY_REMOVED");
     }
 
     private void exerciseIdentityCommands(CurrentUser leader, CurrentUser operator) {

@@ -73,7 +73,7 @@ class TaskLifecycleServiceTest extends MySqlIntegrationTest {
     @BeforeEach
     void resetFixture() {
         reset(objectMapper);
-        jdbc.update("DELETE FROM audit_logs");
+        jdbc.execute("TRUNCATE TABLE audit_logs");
         jdbc.update("DELETE FROM notification_events");
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");
@@ -243,6 +243,19 @@ class TaskLifecycleServiceTest extends MySqlIntegrationTest {
                 .andExpect(jsonPath("$.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.completedByUserId").value(assignee.id().toString()))
                 .andExpect(jsonPath("$.actualMinutes").value(30));
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_logs WHERE action = 'TASK_CALLED'",
+                Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_logs WHERE action = 'TASK_COMPLETED'",
+                Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForMap("""
+                SELECT BIN_TO_UUID(actor_id) actor_id, source_ip
+                FROM audit_logs
+                WHERE action = 'TASK_CALLED'
+                """))
+                .containsEntry("actor_id", assignee.id().toString())
+                .containsEntry("source_ip", "127.0.0.1");
     }
 
     @Test

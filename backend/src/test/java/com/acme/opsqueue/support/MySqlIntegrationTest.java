@@ -13,6 +13,7 @@ public abstract class MySqlIntegrationTest {
     @ServiceConnection
     static final MySQLContainer<?> MYSQL =
             new MySQLContainer<>("mysql:8.4")
+                    .withCommand("--log-bin-trust-function-creators=1")
                     .withDatabaseName("ops_queue")
                     .withUsername("ops_queue")
                     .withPassword("test-password");

@@ -77,29 +77,16 @@ public class AssignmentController {
     }
 
     @PostMapping("/api/assignments/redistribution")
-    @Transactional
     public RedistributionResult redistribute(
             @AuthenticationPrincipal CurrentUser leader,
             @RequestBody RedistributionRequest request) {
         requireBody(request);
-        Instant at = clock.instant();
-        RedistributionResult result = redistribution.redistribute(
+        return redistribution.redistribute(
                 request.operatorId(),
                 request.date(),
                 leader.id(),
                 request.reason(),
-                at);
-        long succeeded = result.items().stream().filter(RedistributionItemResult::success).count();
-        audits.recordCurrentRequest(
-                leader.id(), "REDISTRIBUTION_EXECUTED", "OPERATOR",
-                result.sourceOperatorId(), Map.of(),
-                Map.of(
-                        "date", result.date().toString(),
-                        "taskCount", result.items().size(),
-                        "successCount", succeeded,
-                        "failureCount", result.items().size() - succeeded),
-                at);
-        return result;
+                clock.instant());
     }
 
     @PostMapping("/api/unavailability")

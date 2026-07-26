@@ -62,7 +62,8 @@ class RedistributionItemTransaction {
             LocalDate operationDate,
             UUID leaderId,
             String reason,
-            Instant at) {
+            Instant at,
+            UUID auditCommandId) {
         assignments.requireLeader(leaderId);
         lockScheduleDate(operationDate);
         TaskAssignmentRecord task = lockTask(taskId);
@@ -130,6 +131,17 @@ class RedistributionItemTransaction {
                 candidates,
                 leaderId.toString(),
                 AssignmentService.timestamp(at));
+        int auditUpdated = jdbc.update("""
+                UPDATE redistribution_audit_commands
+                SET success_count = success_count + 1
+                WHERE id = UUID_TO_BIN(?)
+                  AND success_count < task_count
+                """,
+                auditCommandId.toString());
+        if (auditUpdated != 1) {
+            throw new IllegalStateException(
+                    "Redistribution audit command is unavailable");
+        }
         return RedistributionItemResult.success(task, decision.assigneeId());
     }
 

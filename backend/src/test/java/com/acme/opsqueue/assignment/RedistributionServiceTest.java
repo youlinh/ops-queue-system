@@ -42,6 +42,7 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-07-25T04:00:00Z");
 
     @Autowired private RedistributionService service;
+    @Autowired private RedistributionAuditTransaction redistributionAudits;
     @Autowired private AssignmentService assignments;
     @Autowired private UserAccountRepository users;
     @Autowired private DutyRosterRepository rosters;
@@ -58,7 +59,9 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void resetFixture() {
-        jdbc.update("DELETE FROM audit_logs");
+        jdbc.execute("DROP TRIGGER IF EXISTS trg_test_redistribution_audit_insert_failure");
+        jdbc.update("DELETE FROM redistribution_audit_commands");
+        jdbc.execute("TRUNCATE TABLE audit_logs");
         jdbc.update("DELETE FROM unavailability");
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");
@@ -106,6 +109,53 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
         assertThat(assignee(inProgress)).isEqualTo(source.id());
         assertThat(historyCount(pending, "REASSIGN")).isEqualTo(1);
         assertThat(manualAttention(pending)).isFalse();
+        assertThat(auditCount("REDISTRIBUTION_EXECUTED")).isEqualTo(1);
+        assertThat(pendingAuditCount()).isZero();
+    }
+
+    @Test
+    void auditWriteFailureKeepsAssignmentsAndLeavesRecoverableCommand() {
+        UUID pending = seedTask(
+                "OPS-20260725-0001", "PENDING", source.id(), DATE,
+                "2026-07-25 02:00:00");
+        assignments.setUnavailable(
+                source.id(), DATE, "cannot participate", leader.id(), NOW);
+        jdbc.execute("""
+                CREATE TRIGGER trg_test_redistribution_audit_insert_failure
+                BEFORE INSERT ON audit_logs
+                FOR EACH ROW
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'injected audit failure'
+                """);
+
+        RedistributionResult result;
+        try {
+            result = service.redistribute(
+                    source.id(), DATE, leader.id(), "recoverable audit", NOW);
+        } finally {
+            jdbc.execute(
+                    "DROP TRIGGER IF EXISTS trg_test_redistribution_audit_insert_failure");
+        }
+
+        assertThat(result.items()).singleElement().satisfies(item ->
+                assertThat(item.success()).isTrue());
+        assertThat(assignee(pending)).isEqualTo(third.id());
+        assertThat(auditCount("REDISTRIBUTION_EXECUTED")).isZero();
+        assertThat(pendingAuditCount()).isEqualTo(1);
+
+        UUID commandId = UUID.fromString(jdbc.queryForObject(
+                "SELECT BIN_TO_UUID(id) FROM redistribution_audit_commands",
+                String.class));
+        redistributionAudits.finalizeCommand(commandId);
+
+        assertThat(auditCount("REDISTRIBUTION_EXECUTED")).isEqualTo(1);
+        assertThat(pendingAuditCount()).isZero();
+        assertThat(jdbc.queryForObject(
+                """
+                SELECT JSON_UNQUOTE(JSON_EXTRACT(after_json, '$.successCount'))
+                FROM audit_logs
+                WHERE action = 'REDISTRIBUTION_EXECUTED'
+                """,
+                String.class)).isEqualTo("1");
     }
 
     @Test
@@ -249,6 +299,19 @@ class RedistributionServiceTest extends MySqlIntegrationTest {
                 SELECT COUNT(*) FROM assignment_histories
                 WHERE task_id = UUID_TO_BIN(?) AND assignment_type = ?
                 """, Integer.class, taskId.toString(), type);
+    }
+
+    private int auditCount(String action) {
+        return jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_logs WHERE action = ?",
+                Integer.class,
+                action);
+    }
+
+    private int pendingAuditCount() {
+        return jdbc.queryForObject(
+                "SELECT COUNT(*) FROM redistribution_audit_commands",
+                Integer.class);
     }
 
     private UserAccount account(String username, RoleName role) {

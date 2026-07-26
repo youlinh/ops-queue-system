@@ -89,7 +89,7 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
 
     @BeforeEach
     void resetFixture() {
-        jdbc.update("DELETE FROM audit_logs");
+        jdbc.execute("TRUNCATE TABLE audit_logs");
         jdbc.update("DELETE FROM assignment_histories");
         jdbc.update("DELETE FROM tasks");
         jdbc.update("DELETE FROM unavailability");
@@ -354,6 +354,37 @@ class CreateTaskIntegrationTest extends MySqlIntegrationTest {
         assertThat(jdbc.queryForObject(
                 "SELECT BIN_TO_UUID(creator_id) FROM tasks",
                 String.class)).isEqualToIgnoringCase(creator.id().toString());
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*)
+                FROM audit_logs
+                WHERE action = 'TASK_CREATED'
+                  AND object_id = (SELECT id FROM tasks LIMIT 1)
+                """, Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void auditInsertFailureRollsBackTaskTicketAndAssignment() throws Exception {
+        rosters.saveAndFlush(DutyRoster.of(OPERATION_DATE, second.id(), third.id()));
+        CurrentUser developerPrincipal = currentUser(creator, RoleName.DEVELOPER);
+        jdbc.execute("""
+                CREATE TRIGGER trg_test_audit_insert_failure
+                BEFORE INSERT ON audit_logs
+                FOR EACH ROW
+                SIGNAL SQLSTATE '45000'
+                    SET MESSAGE_TEXT = 'injected audit insert failure'
+                """);
+        try {
+            mvc.perform(post("/api/tasks")
+                            .with(csrf())
+                            .with(authentication(authenticationFor(developerPrincipal)))
+                            .contentType(APPLICATION_JSON)
+                            .content(requestJson(alpha.id())))
+                    .andExpect(status().isServiceUnavailable());
+        } finally {
+            jdbc.execute("DROP TRIGGER IF EXISTS trg_test_audit_insert_failure");
+        }
+
+        assertNoAllocationSideEffects();
     }
 
     @Test

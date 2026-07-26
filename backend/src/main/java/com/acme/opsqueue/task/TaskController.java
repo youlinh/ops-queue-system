@@ -90,22 +90,10 @@ public class TaskController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Transactional
     public CreatedTask create(
             @AuthenticationPrincipal CurrentUser creator,
             @Valid @RequestBody CreateTaskRequest request) {
-        Instant at = clock.instant();
-        CreatedTask created =
-                taskCreation.create(request.toCommand(), creator.id(), at);
-        audits.recordCurrentRequest(
-                creator.id(), "TASK_CREATED", "TASK", created.id(), Map.of(),
-                Map.of(
-                        "ticketNumber", created.ticketNumber(),
-                        "assigneeId", created.assigneeId(),
-                        "status", "PENDING",
-                        "assignmentRule", created.assignmentRule().name()),
-                at);
-        return created;
+        return taskCreation.create(request.toCommand(), creator.id(), clock.instant());
     }
 
     @PostMapping("/{id}/call")
