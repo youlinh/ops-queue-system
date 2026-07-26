@@ -81,6 +81,12 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/reports/**")
                         .hasAnyRole(RoleName.OPERATOR.name(), RoleName.LEADER.name())
                         .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/assignments/operators")
+                        .hasAnyRole(
+                                RoleName.OPERATOR.name(),
+                                RoleName.LEADER.name())
+                        .requestMatchers(
                                 "/api/assignments/tasks/*/adjust",
                                 "/api/assignments/redistribution/**",
                                 "/api/unavailability/**")

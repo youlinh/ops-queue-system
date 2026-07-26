@@ -5,6 +5,9 @@ import ChangePasswordPage from '@/features/auth/ChangePasswordPage.vue'
 import LoginPage from '@/features/auth/LoginPage.vue'
 import ForbiddenPage from '@/pages/ForbiddenPage.vue'
 import PlaceholderPage from '@/pages/PlaceholderPage.vue'
+import TaskCreatePage from '@/features/tasks/TaskCreatePage.vue'
+import TaskDetailPage from '@/features/tasks/TaskDetailPage.vue'
+import TaskQueuePage from '@/features/tasks/TaskQueuePage.vue'
 import {
   createRouter,
   createWebHistory,
@@ -81,17 +84,36 @@ export const routes: RouteRecordRaw[] = [
     component: AppLayout,
     children: [
       { path: '', redirect: '/workspace' },
-      placeholders(
-        'workspace',
-        '工作台',
-        ['DEVELOPER', 'OPERATOR', 'LEADER'],
-      ),
-      placeholders('tasks/new', '我要取号', ['DEVELOPER']),
-      placeholders(
-        'tasks',
-        '任务中心',
-        ['DEVELOPER', 'OPERATOR', 'LEADER'],
-      ),
+      {
+        path: 'workspace',
+        component: TaskQueuePage,
+        props: { dashboard: true },
+        meta: {
+          title: '工作台',
+          roles: ['DEVELOPER', 'OPERATOR', 'LEADER'],
+        },
+      },
+      {
+        path: 'tasks/new',
+        component: TaskCreatePage,
+        meta: { title: '我要取号', roles: ['DEVELOPER'] },
+      },
+      {
+        path: 'tasks',
+        component: TaskQueuePage,
+        meta: {
+          title: '任务中心',
+          roles: ['DEVELOPER', 'OPERATOR', 'LEADER'],
+        },
+      },
+      {
+        path: 'tasks/:id',
+        component: TaskDetailPage,
+        meta: {
+          title: '任务详情',
+          roles: ['DEVELOPER', 'OPERATOR', 'LEADER'],
+        },
+      },
       placeholders('rosters', '值班管理', ['LEADER']),
       placeholders('people', '人员与可用性', ['LEADER']),
       placeholders('reports', '统计', ['OPERATOR', 'LEADER']),

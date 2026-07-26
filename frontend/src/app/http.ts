@@ -37,12 +37,14 @@ export function apiErrorMessage(
   error: unknown,
   fallback = '操作失败，请稍后重试',
 ): string {
-  if (!axios.isAxiosError(error)) {
-    return fallback
-  }
-  const data = error.response?.data as { message?: string; code?: string } | undefined
+  const data = (
+    error as { response?: { data?: { message?: string; code?: string } } }
+  )?.response?.data
   if (data?.code === 'PASSWORD_CHANGE_REQUIRED') {
     return '首次登录需要先修改密码'
   }
-  return data?.message || fallback
+  if (data?.message) {
+    return data.message
+  }
+  return fallback
 }

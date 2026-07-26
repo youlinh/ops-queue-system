@@ -124,6 +124,33 @@ public class AssignmentService {
                 """, operator.id().toString(), date);
     }
 
+    @Transactional(readOnly = true)
+    public List<OperatorOption> operatorDirectory(LocalDate operationDate) {
+        if (operationDate == null) {
+            throw AssignmentValidationException.invalidRequest(
+                    "Operation date is required");
+        }
+        return jdbc.query("""
+                SELECT BIN_TO_UUID(u.id) id, u.display_name,
+                       NOT EXISTS (
+                           SELECT 1
+                           FROM unavailability unavailable
+                           WHERE unavailable.user_id = u.id
+                             AND unavailable.unavailable_date = ?
+                       ) available
+                FROM users u
+                JOIN user_roles role ON role.user_id = u.id
+                WHERE u.enabled = TRUE
+                  AND role.role_name = 'OPERATOR'
+                ORDER BY u.display_name, u.id
+                """,
+                (result, row) -> new OperatorOption(
+                        UUID.fromString(result.getString("id")),
+                        result.getString("display_name"),
+                        result.getBoolean("available")),
+                operationDate);
+    }
+
     void requireLeader(UUID actorId) {
         if (actorId == null) {
             throw AssignmentValidationException.forbidden(
@@ -193,6 +220,12 @@ public class AssignmentService {
                 targetId,
                 warnings,
                 task.version() + 1);
+    }
+
+    public record OperatorOption(
+            UUID id,
+            String displayName,
+            boolean available) {
     }
 
     private void insertHistory(

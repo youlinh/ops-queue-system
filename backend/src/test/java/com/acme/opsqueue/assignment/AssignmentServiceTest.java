@@ -6,6 +6,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -274,6 +275,32 @@ class AssignmentServiceTest extends MySqlIntegrationTest {
         assertThat(auditCount("UNAVAILABILITY_CREATED")).isEqualTo(1);
         assertThat(auditCount("UNAVAILABILITY_REMOVED")).isEqualTo(1);
         assertThat(auditCount("TASK_LEADER_ADJUSTED")).isEqualTo(1);
+    }
+
+    @Test
+    void operatorDirectoryIsRoleScopedAndMarksOperationDateAvailability()
+            throws Exception {
+        service.setUnavailable(
+                target.id(), OPERATION_DATE, "conflict", leader.id(), NOW);
+
+        mvc.perform(get("/api/assignments/operators")
+                        .param("operationDate", OPERATION_DATE.toString()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/assignments/operators")
+                        .param("operationDate", OPERATION_DATE.toString())
+                        .with(authentication(auth(developer))))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/assignments/operators")
+                        .param("operationDate", OPERATION_DATE.toString())
+                        .with(authentication(auth(assignee))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '%s')].available"
+                        .formatted(target.id()))
+                        .value(org.hamcrest.Matchers.contains(false)))
+                .andExpect(jsonPath("$[?(@.id == '%s')].displayName"
+                        .formatted(assignee.id()))
+                        .value(org.hamcrest.Matchers.contains(
+                                assignee.displayName())));
     }
 
     private int auditCount(String action) {

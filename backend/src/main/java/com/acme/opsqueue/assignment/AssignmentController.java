@@ -67,6 +67,12 @@ public class AssignmentController {
         return result;
     }
 
+    @GetMapping("/api/assignments/operators")
+    public List<AssignmentService.OperatorOption> operators(
+            @RequestParam LocalDate operationDate) {
+        return assignments.operatorDirectory(operationDate);
+    }
+
     @GetMapping("/api/assignments/redistribution/preview")
     public List<RedistributionTask> preview(
             @RequestParam UUID operatorId,
