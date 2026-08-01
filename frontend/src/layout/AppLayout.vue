@@ -2,7 +2,6 @@
 import { apiErrorMessage } from '@/app/http'
 import { useAuthStore } from '@/features/auth/auth.store'
 import type { Role } from '@/features/auth/auth.types'
-import { taskCounts as fetchTaskCounts } from '@/features/tasks/task.api'
 import { shanghaiDate } from '@/features/tasks/shanghai-time'
 import NotificationToasts from '@/features/notifications/NotificationToasts.vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
@@ -13,19 +12,13 @@ import { todayDuty, type DutySummary } from './duty.api'
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
-const mobileOpen = ref(false)
+const isScrolled = ref(false)
 const duty = ref<DutySummary | null>(null)
 const dutyError = ref('')
 const signingOut = ref(false)
 const now = ref(new Date())
 let dateTimer: ReturnType<typeof setInterval> | null = null
 let activeShanghaiDate = shanghaiDate(now.value)
-const taskCounts = ref({
-  PENDING: null as number | null,
-  IN_PROGRESS: null as number | null,
-  manualAttention: null as number | null,
-})
-
 const roleLabels: Record<Role, string> = {
   DEVELOPER: '开发人员',
   OPERATOR: '运维管理员',
@@ -39,6 +32,10 @@ const todayLabel = computed(() => new Intl.DateTimeFormat('zh-CN', {
   day: 'numeric',
   weekday: 'short',
 }).format(now.value))
+
+function updateScrollEdge(): void {
+  isScrolled.value = window.scrollY > 8
+}
 
 async function loadDuty(): Promise<void> {
   dutyError.value = ''
@@ -56,35 +53,19 @@ function scheduleDateCalibration(): void {
     if (current !== activeShanghaiDate) {
       activeShanghaiDate = current
       now.value = new Date()
-      loadTaskCounts()
       loadDuty()
     }
   }, 60_000)
 }
 
-async function loadTaskCounts(): Promise<void> {
-  try {
-    const counts = await fetchTaskCounts(shanghaiDate())
-    taskCounts.value.PENDING = counts.pending
-    taskCounts.value.IN_PROGRESS = counts.inProgress
-    taskCounts.value.manualAttention = counts.manualAttention
-  } catch {
-    taskCounts.value = {
-      PENDING: null,
-      IN_PROGRESS: null,
-      manualAttention: null,
-    }
-  }
-}
-
 onMounted(async () => {
-  window.addEventListener('ops-task-changed', loadTaskCounts)
-  loadTaskCounts()
+  window.addEventListener('scroll', updateScrollEdge, { passive: true })
+  updateScrollEdge()
   loadDuty()
   scheduleDateCalibration()
 })
 onUnmounted(() => {
-  window.removeEventListener('ops-task-changed', loadTaskCounts)
+  window.removeEventListener('scroll', updateScrollEdge)
   if (dateTimer) clearInterval(dateTimer)
 })
 
@@ -101,7 +82,7 @@ async function signOut(): Promise<void> {
 
 <template>
   <div class="app-shell">
-    <aside class="sidebar" :class="{ 'sidebar--open': mobileOpen }">
+    <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="brand-mark">OPS</div>
         <div>
@@ -112,7 +93,7 @@ async function signOut(): Promise<void> {
       <RoleNavigation
         v-if="user"
         :roles="user.roles"
-        @navigate="mobileOpen = false"
+
       />
       <div class="sidebar-footer">
         <span class="system-dot" />
@@ -122,24 +103,9 @@ async function signOut(): Promise<void> {
         </div>
       </div>
     </aside>
-    <button
-      v-if="mobileOpen"
-      class="sidebar-scrim"
-      aria-label="关闭导航"
-      @click="mobileOpen = false"
-    />
-
     <div class="shell-content">
-      <header class="topbar">
+      <header class="topbar" :class="{ 'topbar--scrolled': isScrolled }">
         <div class="topbar-title">
-          <button
-            class="menu-button"
-            type="button"
-            aria-label="打开导航"
-            @click="mobileOpen = true"
-          >
-            ☰
-          </button>
           <div>
             <span>{{ todayLabel }}</span>
             <h1>{{ pageTitle }}</h1>
@@ -176,23 +142,6 @@ async function signOut(): Promise<void> {
           </button>
         </div>
       </header>
-
-      <section class="status-strip" aria-label="任务状态概览">
-        <div>
-          <span>待执行</span>
-          <strong>{{ taskCounts.PENDING ?? '—' }}</strong>
-        </div>
-        <div>
-          <span>执行中</span>
-          <strong>{{ taskCounts.IN_PROGRESS ?? '—' }}</strong>
-        </div>
-        <div>
-          <span>需人工处理</span>
-          <strong>{{ taskCounts.manualAttention ?? '—' }}</strong>
-        </div>
-        <p>统计范围：今日操作任务</p>
-      </section>
-
       <main class="page-content">
         <RouterView />
       </main>
@@ -201,3 +150,11 @@ async function signOut(): Promise<void> {
     <NotificationToasts v-if="user" />
   </div>
 </template>
+
+<style scoped>
+.topbar { transition: background-color 160ms ease, box-shadow 160ms ease; }
+.topbar--scrolled { background: color-mix(in srgb, var(--ui-surface) 84%, transparent); box-shadow: 0 10px 24px rgba(18, 26, 42, .08); backdrop-filter: blur(20px) saturate(160%); }
+.topbar--scrolled::after { position: absolute; right: 0; bottom: -16px; left: 0; height: 16px; pointer-events: none; background: linear-gradient(to bottom, rgba(18, 26, 42, .08), transparent); content: ''; }
+@media (min-width: 681px) and (max-width: 920px) { .sidebar { width: 72px; transform: none; } .shell-content { margin-left: 72px; } .sidebar-brand { min-height: var(--ui-topbar-height); justify-content: center; padding: 0; } .sidebar-brand > div:not(.brand-mark), .sidebar-footer > div { display: none; } .sidebar-footer { justify-content: center; margin-right: var(--ui-space-2); margin-left: var(--ui-space-2); padding: var(--ui-space-3) 0; } }
+@media (max-width: 680px) { .sidebar { position: static; width: 0; transform: none; transition: none; } .sidebar-brand, .sidebar-footer { display: none; } .shell-content { margin-left: 0; padding-bottom: calc(64px + env(safe-area-inset-bottom)); } .topbar { min-height: 58px; } .topbar-actions { gap: var(--ui-space-2); } .duty-today, .user-summary > div:not(.avatar) { display: none; } }
+</style>
