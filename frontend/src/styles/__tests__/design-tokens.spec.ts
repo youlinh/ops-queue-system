@@ -37,4 +37,17 @@ describe('Apple Design token contract', () => {
     expect(legacy).toContain('.dialog-backdrop')
     expect(legacy).toContain('.notification-toast')
   })
+
+  it('maps links to the link accent while ordinary supporting text stays grayscale', () => {
+    expect(legacy).toMatch(/\.inline-link\s*\{[^}]*color:\s*var\(--ui-accent-link\);/s)
+    expect(legacy).toMatch(
+      /\.compact-task-list a,\s*\.redistribution-results a,\s*\.manual-notice a\s*\{[^}]*color:\s*var\(--ui-accent-link\);/s,
+    )
+    expect(legacy).toMatch(
+      /\.empty-panel > p:not\(\.eyebrow\)\s*\{[^}]*color:\s*var\(--ui-text-secondary\);/s,
+    )
+    expect(legacy).toMatch(
+      /\.redistribution-section h4,\s*\.manual-notice strong\s*\{[^}]*color:\s*var\(--ui-text-secondary\);/s,
+    )
+  })
 })

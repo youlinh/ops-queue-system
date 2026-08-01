@@ -500,7 +500,7 @@ a {
 .inline-link {
   display: inline-block;
   margin-top: 12px;
-  color: var(--ui-text-secondary);
+  color: var(--ui-accent-link);
   font-weight: 700;
   text-decoration: none;
 }
@@ -1184,7 +1184,7 @@ a {
 .compact-task-list a,
 .redistribution-results a,
 .manual-notice a {
-  color: var(--ui-text-secondary);
+  color: var(--ui-accent-link);
   font-weight: 650;
   text-decoration: none;
 }
