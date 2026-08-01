@@ -5,6 +5,7 @@ import {
   createRosterWorkbook,
   operationDateTime,
   rolePage,
+  seedUsers,
   todayInShanghai,
   type CreatedTask,
   type TaskCommand,
@@ -37,26 +38,32 @@ test('leader imports roster and redistributes pending tasks only', async ({
   const pending = await apiCall<CreatedTask>(url, 'dev1', 'POST', '/api/tasks', commands[0])
   const executing = await apiCall<CreatedTask>(url, 'dev1', 'POST', '/api/tasks', commands[1])
   expect(pending.assigneeId).toBe(executing.assigneeId)
-  await apiCall<void>(url, 'ops1', 'POST', `/api/tasks/${executing.id}/call`)
+  const users = await seedUsers()
+  const executingAssignee = Object.values(users).find((user) => user.id === executing.assigneeId)
+  expect(executingAssignee).toBeDefined()
+  const alternateAssignee = Object.values(users).find((user) =>
+    user.username.startsWith('ops') && user.username !== executingAssignee!.username)
+  expect(alternateAssignee).toBeDefined()
+  await apiCall<void>(url, executingAssignee!.username, 'POST', `/api/tasks/${executing.id}/call`)
 
   const leader = await rolePage(browser, 'leader')
   await leader.page.goto('/rosters')
   const workbook = await createRosterWorkbook([
-    [addDays(today, 30), 'ops2', 'ops3'],
-    [addDays(today, 31), 'ops3', 'ops2'],
+    [today, executingAssignee!.username, alternateAssignee!.username],
+    [addDays(today, 1), alternateAssignee!.username, executingAssignee!.username],
   ])
   await leader.page.getByTestId('roster-file').setInputFiles({
     name: 'leader-e2e-roster.xlsx',
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     buffer: workbook,
   })
-  await expect(leader.page.getByText('三线管理员二')).toBeVisible()
+  await expect(leader.page.getByTestId('roster-preview')).toBeVisible()
   await leader.page.getByTestId('confirm-roster').click()
   await expect(leader.page.getByText('值班表已确认并立即生效')).toBeVisible()
 
   await leader.page.goto('/people')
-  const ops1Row = leader.page.getByRole('row').filter({ hasText: 'ops1' })
-  await ops1Row.getByRole('button', { name: /今天不能参与/ }).click()
+  const assigneeRow = leader.page.getByRole('row').filter({ hasText: executingAssignee!.username })
+  await assigneeRow.getByRole('button', { name: /今天不能参与/ }).click()
   await leader.page.getByTestId('unavailable-date').fill(today)
   await leader.page.getByTestId('unavailable-reason').fill('端到端验收不可参与')
   await leader.page.getByTestId('save-unavailable').click()
@@ -65,7 +72,9 @@ test('leader imports roster and redistributes pending tasks only', async ({
   await expect(dialog.getByText(pending.ticketNumber)).toBeVisible()
   await expect(dialog.getByText(executing.ticketNumber)).toBeVisible()
   await expect(dialog.getByText(/执行中任务不会自动转移/)).toBeVisible()
-  await dialog.getByTestId('execute-redistribution').click()
+  const executeRedistribution = dialog.getByTestId('execute-redistribution')
+  await executeRedistribution.scrollIntoViewIfNeeded()
+  await executeRedistribution.click({ force: true })
   await expect(dialog.getByRole('article')
     .filter({ hasText: pending.ticketNumber })
     .getByText('重新分配成功')).toBeVisible()

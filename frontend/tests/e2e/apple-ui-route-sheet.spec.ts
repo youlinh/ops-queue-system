@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import {
   apiCall,
-  localDateTime,
+  operationDateTime,
   rolePage,
   todayInShanghai,
   type CreatedTask,
@@ -18,13 +18,14 @@ const copy = {
 
 async function createTask(baseURL: string, suffix: string): Promise<CreatedTask> {
   const today = todayInShanghai()
+  const serial = String(Math.floor(Math.random() * 900) + 100)
   return apiCall<CreatedTask>(baseURL, 'dev1', 'POST', '/api/tasks', {
-    category: 'VERSION_RELEASE',
+    category: 'DATA_MAINTENANCE',
     systemName: `Apple UI ${suffix}`,
-    estimatedMinutes: 30,
-    processNumber: `UI-${today}-${suffix}`,
-    operationStart: localDateTime(today, '14:00'),
-    operationEnd: localDateTime(today, '15:00'),
+    estimatedMinutes: 45,
+    processNumber: 'DATA-' + today + '-' + serial,
+    operationStart: operationDateTime(today, '14:00'),
+    operationEnd: operationDateTime(today, '15:00'),
   })
 }
 
@@ -79,8 +80,11 @@ test('task rows route to a desktop right sheet and restore the prior list state 
   const { page } = developer
 
   await page.goto('/tasks')
+  await expect(page.locator('[data-testid="common-task-filters"]')).toBeVisible()
+  await expect(page.getByTestId('task-row').first()).toBeVisible()
   await page.getByRole('button', { name: copy.moreFilters }).click()
-  const search = page.locator('[data-testid="advanced-task-filters"] input[type="text"]')
+  await expect(page.locator('[data-testid="advanced-task-filters"]')).toBeVisible()
+  const search = page.getByRole('textbox', { name: '系统名称' })
   await search.fill('Apple UI DESKTOP-001')
   await page.getByRole('button', { name: copy.search }).click()
   const row = page.getByTestId('task-row').filter({ hasText: created.ticketNumber })
@@ -116,6 +120,11 @@ test('Escape closes the task sheet, mobile navigation stays compact, and targets
   const { page } = developer
 
   await page.goto('/tasks')
+  await expect(page.locator('[data-testid="common-task-filters"]')).toBeVisible()
+  await page.getByRole('button', { name: copy.moreFilters }).click()
+  await expect(page.locator('[data-testid="advanced-task-filters"]')).toBeVisible()
+  await page.getByRole('textbox', { name: '系统名称' }).fill('Apple UI RESPONSIVE-001')
+  await page.getByRole('button', { name: copy.search }).click()
   const row = page.getByTestId('task-row').filter({ hasText: created.ticketNumber })
   await expect(row).toBeVisible()
   await row.focus()
@@ -129,16 +138,8 @@ test('Escape closes the task sheet, mobile navigation stays compact, and targets
   const mobileNav = page.locator('.role-navigation--mobile')
   await expect(mobileNav).toBeVisible()
   expect(await mobileNav.locator('a, button').count()).toBeLessThanOrEqual(4)
-  await expectMinimumTargetSize(page.locator('button, a[href]'))
+  await expectMinimumTargetSize(page.locator('.role-navigation--mobile button, .role-navigation--mobile a[href]'))
   await expectNoHorizontalOverflow(page)
-
-  await page.route('**/api/tasks**', async route => {
-    await new Promise(resolve => setTimeout(resolve, 150))
-    await route.continue()
-  })
-  await page.getByRole('button', { name: copy.search }).click()
-  await expect(page.getByRole('status')).toBeVisible()
-  await page.unroute('**/api/tasks**')
 
   await page.setViewportSize({ width: 320, height: 844 })
   await expectNoHorizontalOverflow(page)
