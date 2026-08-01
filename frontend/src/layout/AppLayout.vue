@@ -152,7 +152,7 @@ async function signOut(): Promise<void> {
 </template>
 
 <style scoped>
-.topbar { transition: background-color 160ms ease, box-shadow 160ms ease; }
+.topbar { position: relative; transition: background-color 160ms ease, box-shadow 160ms ease; }
 .topbar--scrolled { background: color-mix(in srgb, var(--ui-surface) 84%, transparent); box-shadow: 0 10px 24px rgba(18, 26, 42, .08); backdrop-filter: blur(20px) saturate(160%); }
 .topbar--scrolled::after { position: absolute; right: 0; bottom: -16px; left: 0; height: 16px; pointer-events: none; background: linear-gradient(to bottom, rgba(18, 26, 42, .08), transparent); content: ''; }
 @media (min-width: 681px) and (max-width: 920px) { .sidebar { width: 72px; transform: none; } .shell-content { margin-left: 72px; } .sidebar-brand { min-height: var(--ui-topbar-height); justify-content: center; padding: 0; } .sidebar-brand > div:not(.brand-mark), .sidebar-footer > div { display: none; } .sidebar-footer { justify-content: center; margin-right: var(--ui-space-2); margin-left: var(--ui-space-2); padding: var(--ui-space-3) 0; } }

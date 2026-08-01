@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AppLayout from '../AppLayout.vue'
+import appLayoutSource from '../AppLayout.vue?raw'
 
 const mocks = vi.hoisted(() => ({
   auth: {
@@ -54,5 +55,9 @@ describe('AppLayout', () => {
     setScrollY(0)
     await nextTick()
     expect(wrapper.find('.topbar').classes()).not.toContain('topbar--scrolled')
+  })
+
+  it('positions the topbar as the scroll edge positioning context', () => {
+    expect(appLayoutSource).toMatch(/\.topbar\s*\{[^}]*position:\s*relative;/s)
   })
 })
