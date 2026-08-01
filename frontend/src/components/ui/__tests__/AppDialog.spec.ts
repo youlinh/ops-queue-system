@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import AppDialog from '../AppDialog.vue'
+import { containFocus } from '../useFocusContainment'
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -43,10 +44,35 @@ describe('AppDialog', () => {
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
     const buttons = dialog?.querySelectorAll<HTMLButtonElement>('button')
     expect(document.activeElement).toBe(buttons?.[0])
+    buttons?.[1].focus()
     buttons?.[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
     expect(document.activeElement).toBe(buttons?.[0])
+    buttons?.[0].focus()
+    buttons?.[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))
+    expect(document.activeElement).toBe(buttons?.[1])
     document.querySelector<HTMLElement>('.ui-overlay')?.click()
     expect(wrapper.emitted('close')).toHaveLength(1)
     wrapper.unmount()
+  })
+
+  it('skips hidden and inert children when selecting the initial focus target', () => {
+    const trigger = document.createElement('button')
+    const container = document.createElement('div')
+    container.tabIndex = -1
+    const hiddenButton = document.createElement('button')
+    hiddenButton.hidden = true
+    const inertContainer = document.createElement('div')
+    inertContainer.setAttribute('inert', '')
+    const inertButton = document.createElement('button')
+    inertContainer.append(inertButton)
+    const activeButton = document.createElement('button')
+    container.append(hiddenButton, inertContainer, activeButton)
+    document.body.append(trigger, container)
+    trigger.focus()
+
+    const cleanup = containFocus(container, trigger)
+
+    expect(document.activeElement).toBe(activeButton)
+    cleanup()
   })
 })

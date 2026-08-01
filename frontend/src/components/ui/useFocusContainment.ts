@@ -14,9 +14,27 @@ const focusableSelector = [
 
 function getFocusableChildren(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(focusableSelector))
-    .filter((element) => !element.hasAttribute('disabled'))
-    .filter((element) => element.getAttribute('aria-hidden') !== 'true')
+    .filter((element) => !element.matches(':disabled'))
     .filter((element) => element.tabIndex >= 0)
+    .filter(isRenderedAndInteractive)
+}
+
+function isRenderedAndInteractive(element: HTMLElement): boolean {
+  for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+    const style = window.getComputedStyle(current)
+    if (
+      current.hidden
+      || current.hasAttribute('inert')
+      || current.getAttribute('aria-hidden') === 'true'
+      || style.display === 'none'
+      || style.visibility === 'hidden'
+      || style.visibility === 'collapse'
+    ) {
+      return false
+    }
+  }
+
+  return true
 }
 
 function focus(element: HTMLElement) {
