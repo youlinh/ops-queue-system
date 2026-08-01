@@ -35,7 +35,6 @@ describe('Apple Design token contract', () => {
     expect(legacy).toContain('.auth-page')
     expect(legacy).toContain('.task-filters')
     expect(legacy).toContain('.dialog-backdrop')
-    expect(legacy).toContain('.notification-toast')
   })
 
   it('maps links to the link accent while ordinary supporting text stays grayscale', () => {

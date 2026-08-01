@@ -157,7 +157,7 @@ a {
   width: 100%;
   padding: 0 14px;
   border: 1px solid var(--ui-hover);
-  border-radius: 3px;
+  border-radius: var(--ui-radius-small);
   outline: none;
   color: var(--ui-text);
   background: var(--ui-surface);
@@ -192,7 +192,7 @@ a {
   height: 48px;
   margin-top: 26px;
   border: 0;
-  border-radius: 3px;
+  border-radius: var(--ui-radius-small);
   color: var(--ui-surface);
   background: var(--ui-accent);
   cursor: pointer;
@@ -273,8 +273,7 @@ a {
   align-items: center;
   gap: 13px;
   padding: 0 14px;
-  border-left: 3px solid transparent;
-  border-radius: 2px;
+  border-radius: var(--ui-radius-small);
   color: var(--ui-text-secondary);
   font-size: 14px;
   text-decoration: none;
@@ -618,7 +617,6 @@ a {
 
 .allocation-result {
   padding: 26px 30px;
-  border-left: 3px solid var(--ui-live);
 }
 
 .result-kicker {
@@ -691,7 +689,7 @@ a {
   height: 38px;
   padding: 0 10px;
   border: 1px solid var(--ui-hover);
-  border-radius: 2px;
+  border-radius: var(--ui-radius-small);
   color: var(--ui-text-secondary);
   background: var(--ui-surface);
   outline: none;
@@ -701,7 +699,7 @@ a {
   min-height: 38px;
   padding: 0 16px;
   border: 1px solid var(--ui-hover);
-  border-radius: 2px;
+  border-radius: var(--ui-radius-small);
   color: var(--ui-text-secondary);
   background: var(--ui-surface);
   cursor: pointer;
@@ -794,7 +792,7 @@ a {
   min-height: 25px;
   align-items: center;
   padding: 0 9px;
-  border-radius: 2px;
+  border-radius: var(--ui-radius-small);
   font-size: 10px;
   font-weight: 800;
   white-space: nowrap;
@@ -1025,7 +1023,6 @@ a {
 .import-errors {
   margin: 18px 0;
   padding: 16px 18px;
-  border-left: 3px solid var(--ui-attention);
   color: var(--ui-attention);
   background: var(--ui-hover);
   font-size: 11px;
@@ -1194,7 +1191,6 @@ a {
   gap: 7px;
   margin-top: 18px;
   padding: 15px;
-  border-left: 3px solid var(--ui-attention);
   background: var(--ui-hover);
 }
 
@@ -1297,7 +1293,7 @@ a {
   max-height: 360px;
   overflow: auto;
   padding: 14px;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-small);
   color: var(--ui-hover);
   background: var(--ui-accent);
   font-size: 11px;
@@ -1364,85 +1360,6 @@ a {
   .allocation-guide {
     grid-row: auto;
   }
-}
-
-/* Notification toasts (task-called reminders) */
-.notification-stack {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: min(340px, calc(100vw - 40px));
-  pointer-events: none;
-}
-
-.notification-toast {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--ui-hairline);
-  border-left: 3px solid var(--ui-accent);
-  border-radius: 3px;
-  background: var(--ui-surface);
-  box-shadow: 0 14px 32px var(--ui-overlay-scrim);
-  pointer-events: auto;
-}
-
-.notification-dot {
-  margin-top: 6px;
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--ui-accent);
-  box-shadow: 0 0 0 4px var(--ui-accent);
-}
-
-.notification-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.notification-body strong {
-  font-size: 14px;
-  line-height: 1.35;
-}
-
-.notification-body span {
-  font-size: 12px;
-  color: var(--ui-text-secondary);
-}
-
-.notification-close {
-  margin-left: auto;
-  border: 0;
-  padding: 0 2px;
-  background: none;
-  color: var(--ui-text-secondary);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.notification-close:hover {
-  color: var(--ui-text);
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: opacity .18s ease, transform .18s ease;
-}
-
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
 }
 
 @media (max-width: 680px) {
