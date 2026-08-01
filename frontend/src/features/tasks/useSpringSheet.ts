@@ -143,8 +143,6 @@ export function useSpringSheet(options: SpringSheetOptions) {
   }
 
   function open() {
-    const start = Math.min(closedPosition(), Math.max(position.value, extent() * .28))
-    position.value = start
     settle(0, -260)
   }
 

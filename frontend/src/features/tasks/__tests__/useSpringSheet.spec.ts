@@ -59,4 +59,52 @@ describe('sheet physics', () => {
     expect(sheet.position.value).toBe(500)
     expect(requestFrame).not.toHaveBeenCalled()
   })
+
+  it('reopens from the current presentation value without a synchronous jump', () => {
+    const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1)
+    const sheet = useSpringSheet({ extent: 460, reducedMotion: false })
+    sheet.position.value = 40
+
+    sheet.open()
+
+    expect(sheet.position.value).toBe(40)
+    sheet.stop()
+    requestFrame.mockRestore()
+  })
+
+  it('releases pointer capture and clears dragging after a normal pointerup', () => {
+    const grabZone = document.createElement('div')
+    const setPointerCapture = vi.fn()
+    const releasePointerCapture = vi.fn()
+    Object.assign(grabZone, { setPointerCapture, releasePointerCapture })
+    const sheet = useSpringSheet({ extent: 460, reducedMotion: true })
+
+    sheet.onPointerDown({
+      button: 0, pointerId: 8, clientX: 500, currentTarget: grabZone,
+    } as unknown as PointerEvent)
+    sheet.onPointerMove({ pointerId: 8, clientX: 100 } as unknown as PointerEvent)
+    sheet.onPointerUp({ pointerId: 8, clientX: 100, type: 'pointerup' } as unknown as PointerEvent)
+
+    expect(setPointerCapture).toHaveBeenCalledWith(8)
+    expect(releasePointerCapture).toHaveBeenCalledWith(8)
+    expect(sheet.dragging.value).toBe(false)
+    expect(sheet.position.value).toBe(0)
+  })
+
+  it('releases pointer capture and settles a cancelled outward drag closed', () => {
+    const grabZone = document.createElement('div')
+    const releasePointerCapture = vi.fn()
+    Object.assign(grabZone, { setPointerCapture: vi.fn(), releasePointerCapture })
+    const sheet = useSpringSheet({ extent: 460, reducedMotion: true })
+
+    sheet.onPointerDown({
+      button: 0, pointerId: 9, clientX: 500, currentTarget: grabZone,
+    } as unknown as PointerEvent)
+    sheet.onPointerMove({ pointerId: 9, clientX: 400 } as unknown as PointerEvent)
+    sheet.onPointerUp({ pointerId: 9, clientX: 400, type: 'pointercancel' } as unknown as PointerEvent)
+
+    expect(releasePointerCapture).toHaveBeenCalledWith(9)
+    expect(sheet.dragging.value).toBe(false)
+    expect(sheet.position.value).toBe(500)
+  })
 })
