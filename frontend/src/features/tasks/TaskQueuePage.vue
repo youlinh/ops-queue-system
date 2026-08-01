@@ -184,8 +184,8 @@ onUnmounted(() => {
               :key="task.id"
               class="task-row"
               tabindex="0"
-              @click="router.push(`/tasks/${task.id}`)"
-              @keydown.enter="router.push(`/tasks/${task.id}`)"
+              @click="router.push({ name: 'task-detail', params: { id: task.id } })"
+              @keydown.enter="router.push({ name: 'task-detail', params: { id: task.id } })"
             >
               <td>
                 <strong>{{ task.ticketNumber }}</strong>

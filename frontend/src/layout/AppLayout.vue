@@ -4,6 +4,8 @@ import { useAuthStore } from '@/features/auth/auth.store'
 import type { Role } from '@/features/auth/auth.types'
 import { shanghaiDate } from '@/features/tasks/shanghai-time'
 import NotificationToasts from '@/features/notifications/NotificationToasts.vue'
+import TaskDetailSheet from '@/features/tasks/TaskDetailSheet.vue'
+import { closeTaskSheet } from '@/features/tasks/useRouteSheet'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import RoleNavigation from './RoleNavigation.vue'
@@ -68,6 +70,10 @@ onUnmounted(() => {
   window.removeEventListener('scroll', updateScrollEdge)
   if (dateTimer) clearInterval(dateTimer)
 })
+
+async function closeSheet(): Promise<void> {
+  await closeTaskSheet(router, route.fullPath)
+}
 
 async function signOut(): Promise<void> {
   signingOut.value = true
@@ -145,6 +151,11 @@ async function signOut(): Promise<void> {
       <main class="page-content">
         <RouterView />
       </main>
+      <TaskDetailSheet
+        v-if="route.meta.taskSheet"
+        :task-id="String(route.params.id)"
+        @close="closeSheet"
+      />
     </div>
 
     <NotificationToasts v-if="user" />

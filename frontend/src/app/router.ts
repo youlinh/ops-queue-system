@@ -6,7 +6,6 @@ import LoginPage from '@/features/auth/LoginPage.vue'
 import ForbiddenPage from '@/pages/ForbiddenPage.vue'
 import PlaceholderPage from '@/pages/PlaceholderPage.vue'
 import TaskCreatePage from '@/features/tasks/TaskCreatePage.vue'
-import TaskDetailPage from '@/features/tasks/TaskDetailPage.vue'
 import TaskQueuePage from '@/features/tasks/TaskQueuePage.vue'
 import RosterImportPage from '@/features/roster/RosterImportPage.vue'
 import PeoplePage from '@/features/people/PeoplePage.vue'
@@ -24,6 +23,7 @@ declare module 'vue-router' {
     public?: boolean
     roles?: Role[]
     title?: string
+    taskSheet?: boolean
   }
 }
 
@@ -104,6 +104,7 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: 'tasks',
+        name: 'tasks',
         component: TaskQueuePage,
         meta: {
           title: '任务中心',
@@ -112,8 +113,11 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: 'tasks/:id',
-        component: TaskDetailPage,
+        name: 'task-detail',
+        component: TaskQueuePage,
+        props: { dashboard: false },
         meta: {
+          taskSheet: true,
           title: '任务详情',
           roles: ['DEVELOPER', 'OPERATOR', 'LEADER'],
         },
