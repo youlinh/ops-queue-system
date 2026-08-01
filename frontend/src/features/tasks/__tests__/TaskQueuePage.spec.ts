@@ -86,6 +86,7 @@ describe('TaskQueuePage', () => {
 
     expect(router.currentRoute.value.name).toBe('task-detail')
     expect(router.currentRoute.value.params.id).toBe('task-1')
+    expect(wrapper.get('[data-testid="task-row"]').attributes('aria-label')).toContain('\u4efb\u52a1\u8be6\u60c5')
   })
 
   it('keeps the current results visible while refresh is pending', async () => {
@@ -123,7 +124,7 @@ describe('TaskFilters', () => {
 
     expect(wrapper.get('[data-testid="common-task-filters"]').text()).toContain('类别')
     expect(wrapper.get('[data-testid="common-task-filters"]').text()).toContain('状态')
-    expect(wrapper.find('[data-testid="advanced-task-filters"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="advanced-task-filters"]').exists()).toBe(true)
 
     const disclosure = wrapper.get('[aria-controls="advanced-task-filters"]')
     expect(disclosure.attributes('aria-expanded')).toBe('false')

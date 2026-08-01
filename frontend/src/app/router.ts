@@ -7,6 +7,7 @@ import ForbiddenPage from '@/pages/ForbiddenPage.vue'
 import PlaceholderPage from '@/pages/PlaceholderPage.vue'
 import TaskCreatePage from '@/features/tasks/TaskCreatePage.vue'
 import TaskQueuePage from '@/features/tasks/TaskQueuePage.vue'
+import WorkspacePage from '@/features/workspace/WorkspacePage.vue'
 import RosterImportPage from '@/features/roster/RosterImportPage.vue'
 import PeoplePage from '@/features/people/PeoplePage.vue'
 import ReportingPage from '@/features/reporting/ReportingPage.vue'
@@ -90,8 +91,7 @@ export const routes: RouteRecordRaw[] = [
       { path: '', redirect: '/workspace' },
       {
         path: 'workspace',
-        component: TaskQueuePage,
-        props: { dashboard: true },
+        component: WorkspacePage,
         meta: {
           title: '工作台',
           roles: ['DEVELOPER', 'OPERATOR', 'LEADER'],
