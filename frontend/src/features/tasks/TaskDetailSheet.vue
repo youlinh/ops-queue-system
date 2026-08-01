@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AppIcon from '@/components/ui/AppIcon.vue'
 import { containFocus } from '@/components/ui/useFocusContainment'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import TaskDetailContent from './TaskDetailContent.vue'
 import { useSpringSheet } from './useSpringSheet'
 
@@ -10,29 +10,32 @@ const emit = defineEmits<{ close: [] }>()
 
 const dialog = ref<HTMLElement | null>(null)
 const isMobile = ref(typeof window !== 'undefined' && window.innerWidth <= 680)
-const axis = isMobile.value ? 'y' : 'x'
+const axis = () => isMobile.value ? 'y' : 'x'
 let stopFocusContainment: (() => void) | undefined
 let removeResize: (() => void) | undefined
-let closeRequested = false
+let closing = false
+let closeEmitted = false
 
 const sheet = useSpringSheet({
   axis,
   extent: () => isMobile.value ? Math.min(620, window.innerHeight || 620) : 520,
   onDismiss: () => {
-    if (!closeRequested) emit('close')
+    if (closeEmitted) return
+    closing = true
+    closeEmitted = true
+    emit('close')
   },
 })
 
-const transform = computed(() => axis === 'y'
+const transform = computed(() => axis() === 'y'
   ? `translate3d(0, ${sheet.position.value}px, 0)`
   : `translate3d(${sheet.position.value}px, 0, 0)`)
 const opacity = computed(() => String(Math.max(.18, sheet.progress.value)))
 
 function requestClose(): void {
-  if (closeRequested) return
-  closeRequested = true
+  if (closing) return
+  closing = true
   sheet.close()
-  emit('close')
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -54,6 +57,10 @@ onMounted(async () => {
   await nextTick()
   if (dialog.value) stopFocusContainment = containFocus(dialog.value, returnTarget)
   sheet.open()
+})
+
+watch(isMobile, () => {
+  if (!sheet.dragging.value && !closing) sheet.open()
 })
 
 onBeforeUnmount(() => {

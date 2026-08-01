@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import TaskDetailSheet from '../TaskDetailSheet.vue'
 import { canGoBackToApp, closeTaskSheet } from '../useRouteSheet'
@@ -33,7 +33,14 @@ function mountSheet(taskId = 'task-1') {
 }
 
 describe('TaskDetailSheet', () => {
-  beforeEach(() => vi.resetAllMocks())
+  beforeEach(() => {
+    vi.resetAllMocks()
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
 
   it('keeps a failed detail request open and exposes retry', async () => {
     vi.mocked(taskApi.taskDetail).mockRejectedValue(new Error('offline'))
@@ -127,6 +134,32 @@ describe('TaskDetailSheet', () => {
 
     expect(taskApi.taskDetail).toHaveBeenLastCalledWith('task-2')
     expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('changes from a desktop right sheet to a mobile vertical drag and close path after resize', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    vi.mocked(taskApi.taskDetail).mockRejectedValue(new Error('offline'))
+    const wrapper = mountSheet()
+    await flushPromises()
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 640 })
+    window.dispatchEvent(new Event('resize'))
+    await flushPromises()
+    const grab = sheetDialog().querySelector<HTMLElement>('.task-detail-sheet__grab')!
+    const pointer = (type: string, values: Record<string, number>) => {
+      const event = Object.assign(new Event(type, { bubbles: true }), values)
+      grab.dispatchEvent(event)
+    }
+    pointer('pointerdown', { button: 0, pointerId: 11, clientX: 20, clientY: 100 })
+    pointer('pointermove', { pointerId: 11, clientX: 20, clientY: 400 })
+    await wrapper.vm.$nextTick()
+    expect(sheetDialog().style.transform).toContain('translate3d(0, 300px, 0)')
+    pointer('pointerup', { pointerId: 11, clientX: 20, clientY: 400 })
+    await flushPromises()
+
+    expect(wrapper.emitted('close')).toHaveLength(1)
     wrapper.unmount()
   })
 })

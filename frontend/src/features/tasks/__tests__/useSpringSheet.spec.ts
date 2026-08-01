@@ -1,3 +1,4 @@
+import { ref } from 'vue'
 import { describe, expect, it } from 'vitest'
 import {
   projectEndpoint,
@@ -106,5 +107,20 @@ describe('sheet physics', () => {
     expect(releasePointerCapture).toHaveBeenCalledWith(9)
     expect(sheet.dragging.value).toBe(false)
     expect(sheet.position.value).toBe(500)
+  })
+
+  it('switches pointer coordinates when a reactive axis changes', () => {
+    const axis = ref<'x' | 'y'>('x')
+    const grabZone = document.createElement('div')
+    Object.assign(grabZone, { setPointerCapture: vi.fn() })
+    const sheet = useSpringSheet({ axis, extent: 460, reducedMotion: true })
+
+    sheet.onPointerDown({ button: 0, pointerId: 10, clientX: 500, clientY: 20, currentTarget: grabZone } as unknown as PointerEvent)
+    sheet.onPointerMove({ pointerId: 10, clientX: 420, clientY: 20 } as unknown as PointerEvent)
+    expect(sheet.position.value).toBe(420)
+
+    axis.value = 'y'
+    sheet.onPointerMove({ pointerId: 10, clientX: 420, clientY: 200 } as unknown as PointerEvent)
+    expect(sheet.position.value).toBe(200)
   })
 })

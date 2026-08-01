@@ -11,7 +11,7 @@ export interface SpringSheetOptions {
   /** The measured width (desktop) or height (mobile) of the sheet. */
   extent: MaybeRefOrGetter<number>
   /** Desktop sheets travel horizontally; mobile sheets travel vertically. */
-  axis?: 'x' | 'y'
+  axis?: MaybeRefOrGetter<'x' | 'y'>
   /** Allows callers and tests to provide a reactive reduced-motion preference. */
   reducedMotion?: MaybeRefOrGetter<boolean>
   /** Called after the close settle completes. */
@@ -70,7 +70,7 @@ function performanceNow() {
  * mobile presentation while retaining one gesture model.
  */
 export function useSpringSheet(options: SpringSheetOptions) {
-  const axis = options.axis ?? 'x'
+  const axis = () => resolve(options.axis ?? 'x')
   const extent = () => Math.max(0, resolve(options.extent))
   const closedPosition = () => extent() + CLOSED_GUTTER
   const position = ref(closedPosition())
@@ -155,7 +155,7 @@ export function useSpringSheet(options: SpringSheetOptions) {
 
     stop()
     activePointerId = event.pointerId
-    const coordinate = eventPosition(event, axis)
+    const coordinate = eventPosition(event, axis())
     grabOffset = coordinate - position.value
     samples = [{ position: coordinate, time: performanceNow() }]
     dragging.value = true
@@ -168,7 +168,7 @@ export function useSpringSheet(options: SpringSheetOptions) {
   function onPointerMove(event: PointerEvent) {
     if (!dragging.value || activePointerId !== event.pointerId) return
 
-    const coordinate = eventPosition(event, axis)
+    const coordinate = eventPosition(event, axis())
     const next = coordinate - grabOffset
     position.value = next < 0 ? rubberbandDistance(next, extent()) : next
 
@@ -181,7 +181,7 @@ export function useSpringSheet(options: SpringSheetOptions) {
     if (!dragging.value || activePointerId !== event.pointerId) return
 
     const now = performanceNow()
-    const coordinate = eventPosition(event, axis)
+    const coordinate = eventPosition(event, axis())
     samples.push({ position: coordinate, time: now })
     const velocity = velocityFromSamples(samples, now)
     dragging.value = false
