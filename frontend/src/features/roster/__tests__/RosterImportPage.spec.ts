@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RosterImportPage from '../RosterImportPage.vue'
 import * as rosterApi from '../roster.api'
@@ -61,6 +61,20 @@ describe('RosterImportPage', () => {
       .toBeDefined()
   })
 
+  it('marks preview as the active import stage and keeps errors beside the preview', async () => {
+    vi.mocked(rosterApi.previewRoster).mockResolvedValue({
+      batchId: 'batch-1', valid: false, rows: [],
+      errors: [{ rowNumber: 7, message: '账号不存在' }],
+    })
+    const wrapper = mount(RosterImportPage)
+    const file = new File(['xlsx'], 'invalid-duty.xlsx')
+
+    await selectFile(wrapper, file)
+    await flushPromises()
+
+    expect(wrapper.get('[aria-current="step"]').text()).toContain('预览校验')
+    expect(wrapper.get('[data-testid="roster-preview"]').text()).toContain('Excel 第 7 行')
+  })
   it('lists resolved duty rows and enables confirmation', async () => {
     vi.mocked(rosterApi.previewRoster).mockResolvedValue({
       batchId: 'batch-1',

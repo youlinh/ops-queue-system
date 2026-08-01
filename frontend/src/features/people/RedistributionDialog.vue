@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/app/http'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { searchTasks } from '@/features/tasks/task.api'
 import type { TaskRow } from '@/features/tasks/task.types'
 import { onMounted, ref } from 'vue'
@@ -70,10 +71,12 @@ onMounted(loadPreview)
 </script>
 
 <template>
-  <div class="dialog-backdrop">
-    <section class="task-dialog task-dialog--wide" role="dialog" aria-modal="true">
-      <p class="eyebrow">REDISTRIBUTE</p>
-      <h3>{{ operator.displayName }} · {{ date }} 任务重新分配</h3>
+  <AppDialog
+    :open="true" labelled-by="redistribution-dialog-title"
+    @close="emit('close')"
+  >
+    <p class="eyebrow">REDISTRIBUTE</p>
+      <h3 id="redistribution-dialog-title">{{ operator.displayName }} · {{ date }} 任务重新分配</h3>
       <p v-if="loading" class="muted">正在检查任务…</p>
       <p v-if="errorMessage" class="form-error" role="alert">
         {{ errorMessage }}
@@ -123,12 +126,12 @@ onMounted(loadPreview)
         当前没有可自动重新分配的待执行任务。
       </p>
       <div class="dialog-actions">
-        <button class="action-button" type="button" @click="emit('close')">
+        <button class="ui-button" type="button" @click="emit('close')">
           关闭
         </button>
         <button
           data-testid="execute-redistribution"
-          class="action-button action-button--primary"
+          class="ui-button ui-button--primary"
           type="button"
           :disabled="submitting || loading || pending.length === 0"
           @click="execute"
@@ -136,6 +139,5 @@ onMounted(loadPreview)
           {{ submitting ? '重新分配中…' : '确认重新分配待执行任务' }}
         </button>
       </div>
-    </section>
-  </div>
+  </AppDialog>
 </template>

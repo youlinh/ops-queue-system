@@ -5,8 +5,8 @@ defineProps<{ rows: RosterPreviewRow[] }>()
 </script>
 
 <template>
-  <div class="task-table-wrap">
-    <table class="task-table roster-preview-table">
+  <div class="task-table-wrap" aria-label="值班表预览">
+    <table class="task-table ui-table roster-preview-table">
       <thead>
         <tr>
           <th>Excel 行</th>

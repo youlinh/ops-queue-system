@@ -22,6 +22,11 @@ const successMessage = ref('')
 const canConfirm = computed(() =>
   preview.value?.valid === true && !confirming.value,
 )
+const importStage = computed<'upload' | 'preview' | 'confirmed'>(() => {
+  if (successMessage.value) return 'confirmed'
+  if (preview.value) return 'preview'
+  return 'upload'
+})
 
 async function loadHistory(): Promise<void> {
   try {
@@ -104,18 +109,30 @@ onMounted(loadHistory)
 </script>
 
 <template>
-  <div class="management-layout">
-    <section class="content-panel roster-import-panel">
+  <div class="management-layout roster-management">
+    <section class="content-panel ui-panel roster-import-panel">
       <div class="panel-heading">
         <div>
           <p class="eyebrow">DUTY ROSTER IMPORT</p>
           <h2>值班表导入</h2>
           <p>先下载标准模板，上传后核对解析结果，再确认生效。</p>
         </div>
-        <a class="action-button template-link" href="/api/rosters/template">
+        <a class="ui-button ui-button--quiet template-link" href="/api/rosters/template">
           下载标准模板
         </a>
       </div>
+
+      <ol class="ui-stage-indicator" aria-label="导入进度">
+        <li :aria-current="importStage === 'upload' ? 'step' : undefined">
+          上传文件
+        </li>
+        <li :aria-current="importStage === 'preview' ? 'step' : undefined">
+          预览校验
+        </li>
+        <li :aria-current="importStage === 'confirmed' ? 'step' : undefined">
+          确认生效
+        </li>
+      </ol>
 
       <label class="file-drop">
         <input
@@ -128,16 +145,17 @@ onMounted(loadHistory)
         <span>{{ selectedFilename || '文件仅用于预览，确认后才会生效' }}</span>
       </label>
 
-      <div v-if="preview?.errors.length" class="import-errors" role="alert">
-        <strong>发现 {{ preview.errors.length }} 项问题</strong>
-        <ul>
-          <li v-for="item in preview.errors" :key="`${item.rowNumber}-${item.message}`">
-            Excel 第 {{ item.rowNumber }} 行：{{ item.message }}
-          </li>
-        </ul>
-      </div>
-
-      <RosterPreviewTable v-if="preview?.rows.length" :rows="preview.rows" />
+      <section v-if="preview" data-testid="roster-preview" class="roster-preview-region" aria-live="polite">
+        <div v-if="preview.errors.length" class="import-errors" role="alert">
+          <strong>发现 {{ preview.errors.length }} 项问题</strong>
+          <ul>
+            <li v-for="item in preview.errors" :key="`${item.rowNumber}-${item.message}`">
+              Excel 第 {{ item.rowNumber }} 行：{{ item.message }}
+            </li>
+          </ul>
+        </div>
+        <RosterPreviewTable v-if="preview.rows.length" :rows="preview.rows" />
+      </section>
       <p v-if="errorMessage" class="form-error" role="alert">
         {{ errorMessage }}
       </p>
@@ -147,7 +165,7 @@ onMounted(loadHistory)
       <div class="form-actions">
         <button
           data-testid="confirm-roster"
-          class="action-button action-button--primary"
+          class="ui-button ui-button--primary"
           type="button"
           :disabled="!canConfirm"
           @click="confirm"
@@ -157,7 +175,7 @@ onMounted(loadHistory)
       </div>
     </section>
 
-    <section class="content-panel import-history-panel">
+    <section class="content-panel ui-panel import-history-panel">
       <p class="eyebrow">IMPORT HISTORY</p>
       <h3>最近导入记录</h3>
       <div v-if="history.length" class="history-list">
@@ -175,3 +193,51 @@ onMounted(loadHistory)
     </section>
   </div>
 </template>
+
+<style scoped>
+.ui-stage-indicator {
+  display: flex;
+  gap: var(--ui-space-3);
+  margin: 0 0 var(--ui-space-5);
+  padding: 0;
+  color: var(--ui-text-tertiary);
+  font-size: .875rem;
+  font-weight: 600;
+  list-style: none;
+}
+
+.ui-stage-indicator li {
+  display: inline-flex;
+  min-height: var(--ui-action-min-height);
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.ui-stage-indicator li:not(:last-child)::after {
+  width: var(--ui-space-5);
+  height: 1px;
+  background: var(--ui-hairline);
+  content: '';
+}
+
+.ui-stage-indicator li[aria-current='step'] {
+  color: var(--ui-accent-link);
+}
+
+.roster-preview-region {
+  display: grid;
+  gap: var(--ui-space-3);
+  margin-top: var(--ui-space-5);
+}
+
+@media (max-width: 680px) {
+  .ui-stage-indicator {
+    gap: var(--ui-space-2);
+    font-size: .8125rem;
+  }
+
+  .ui-stage-indicator li:not(:last-child)::after {
+    width: var(--ui-space-3);
+  }
+}
+</style>

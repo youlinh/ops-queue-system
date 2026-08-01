@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/app/http'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import type { Role } from '@/features/auth/auth.types'
 import { shanghaiDate } from '@/features/tasks/shanghai-time'
 import { onMounted, reactive, ref } from 'vue'
@@ -149,8 +150,8 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="people-layout">
-    <form class="content-panel account-create" @submit.prevent="create">
+  <section class="people-layout ui-page-stack">
+    <form class="content-panel ui-panel account-create" @submit.prevent="create">
       <div class="panel-heading">
         <div>
           <p class="eyebrow">LOCAL ACCOUNT</p>
@@ -185,12 +186,12 @@ onMounted(load)
           </label>
         </fieldset>
       </div>
-      <button class="primary-button compact-button" type="submit">
+      <button class="ui-button ui-button--primary compact-button" type="submit">
         创建账号
       </button>
     </form>
 
-    <section class="content-panel account-list">
+    <section class="content-panel ui-panel account-list">
       <div class="panel-heading">
         <div>
           <p class="eyebrow">PEOPLE</p>
@@ -227,15 +228,15 @@ onMounted(load)
                 <small v-if="account.mustChangePassword">需修改初始密码</small>
               </td>
               <td class="table-actions">
-                <button class="text-button" type="button" @click="openRoles(account)">
+                <button class="ui-button ui-button--quiet text-button" type="button" @click="openRoles(account)">
                   角色
                 </button>
-                <button class="text-button" type="button" @click="openPassword(account)">
+                <button class="ui-button ui-button--quiet text-button" type="button" @click="openPassword(account)">
                   重置密码
                 </button>
                 <button
                   v-if="account.enabled"
-                  class="text-button text-button--danger"
+                  class="ui-button ui-button--quiet text-button text-button--danger"
                   type="button"
                   @click="disable(account)"
                 >
@@ -245,7 +246,7 @@ onMounted(load)
               <td>
                 <button
                   v-if="account.enabled && account.roles.includes('OPERATOR')"
-                  class="action-button"
+                  class="ui-button ui-button--quiet action-button"
                   type="button"
                   @click="openUnavailable(account)"
                 >
@@ -260,11 +261,15 @@ onMounted(load)
     </section>
   </section>
 
-  <div v-if="selected && (dialog === 'roles' || dialog === 'password')" class="dialog-backdrop">
-    <section class="task-dialog" role="dialog" aria-modal="true">
-      <template v-if="dialog === 'roles'">
+  <AppDialog
+    v-if="selected && (dialog === 'roles' || dialog === 'password')"
+    :open="true"
+    labelled-by="people-management-dialog-title"
+    @close="closeDialog"
+  >
+    <template v-if="dialog === 'roles'">
         <p class="eyebrow">ROLES</p>
-        <h3>调整 {{ selected.displayName }} 的角色</h3>
+        <h3 id="people-management-dialog-title">调整 {{ selected.displayName }} 的角色</h3>
         <fieldset class="role-options role-options--dialog">
           <label v-for="role in allRoles" :key="role">
             <input v-model="roleSelection" type="checkbox" :value="role" />
@@ -274,7 +279,7 @@ onMounted(load)
       </template>
       <template v-else>
         <p class="eyebrow">RESET PASSWORD</p>
-        <h3>重置 {{ selected.displayName }} 的密码</h3>
+        <h3 id="people-management-dialog-title">重置 {{ selected.displayName }} 的密码</h3>
         <label class="field">
           <span>新初始密码（至少 12 位）</span>
           <input
@@ -285,19 +290,18 @@ onMounted(load)
         </label>
       </template>
       <div class="dialog-actions">
-        <button class="action-button" type="button" @click="closeDialog">
+        <button class="ui-button ui-button--quiet action-button" type="button" @click="closeDialog">
           取消
         </button>
         <button
-          class="action-button action-button--primary"
+          class="ui-button ui-button--primary"
           type="button"
           @click="dialog === 'roles' ? saveRoles() : savePassword()"
         >
           保存
         </button>
       </div>
-    </section>
-  </div>
+  </AppDialog>
 
   <UnavailabilityDialog
     v-if="selected && dialog === 'unavailable'"
