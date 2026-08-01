@@ -6,7 +6,7 @@ import * as taskApi from '../task.api'
 vi.mock('../task.api')
 
 function mountPage() {
-  return mount(TaskCreatePage)
+  return mount(TaskCreatePage, { attachTo: document.body })
 }
 
 async function fillValidForm(wrapper: ReturnType<typeof mountPage>) {
@@ -23,6 +23,7 @@ async function fillValidForm(wrapper: ReturnType<typeof mountPage>) {
 
 describe('TaskCreatePage', () => {
   beforeEach(() => {
+    document.body.innerHTML = ''
     vi.resetAllMocks()
     vi.mocked(taskApi.suggestSystemNames).mockResolvedValue([])
   })
@@ -40,9 +41,17 @@ describe('TaskCreatePage', () => {
     await wrapper.get('[data-testid="submit-task"]').trigger('click')
 
     expect(wrapper.text()).toContain('请输入操作流程编号')
+    expect(wrapper.get('[data-testid="process-number"]').element.parentElement?.textContent).toContain('数据维护流程编号')
     expect(taskApi.createTask).not.toHaveBeenCalled()
   })
 
+  it('focuses the first invalid create field and keeps the error beside the form', async () => {
+    const wrapper = mountPage()
+    await wrapper.get('[data-testid="submit-task"]').trigger('click')
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('请选择任务类别')
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="category"]').element)
+  })
   it('rejects an end time that is not after the start time', async () => {
     const wrapper = mountPage()
     await fillValidForm(wrapper)

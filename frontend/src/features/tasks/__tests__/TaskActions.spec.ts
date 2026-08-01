@@ -44,8 +44,11 @@ function mountActions(
   currentTask: TaskDetail,
   userId = operatorId,
   roles: Array<'DEVELOPER' | 'OPERATOR' | 'LEADER'> = ['OPERATOR'],
+  options: { attachTo?: HTMLElement | string } = {},
 ) {
   return mount(TaskActions, {
+    ...options,
+    global: { stubs: { Teleport: true } },
     props: {
       task: currentTask,
       currentUserId: userId,
@@ -79,7 +82,38 @@ describe('TaskActions', () => {
     expect(wrapper.find('[data-testid="call-task"]').exists()).toBe(false)
   })
 
-  it('shows no operational actions after completion', () => {
+  it('returns focus to the complete button when its dialog closes', async () => {
+    const wrapper = mountActions(task({
+      status: 'IN_PROGRESS',
+      canCall: false,
+      canComplete: true,
+    }), operatorId, ['OPERATOR'], { attachTo: document.body })
+    const trigger = wrapper.get('[data-testid="complete-task"]')
+    await trigger.trigger('click')
+    await wrapper.get('[data-testid="cancel-dialog"]').trigger('click')
+
+    expect(document.activeElement).toBe(trigger.element)
+    wrapper.unmount()
+  })
+    it('keeps an API failure visible in the complete dialog', async () => {
+    vi.mocked(taskApi.completeTask).mockRejectedValue({
+      response: { data: { message: '状态已被其他管理员更新' } },
+    })
+    const wrapper = mountActions(task({
+      status: 'IN_PROGRESS',
+      canCall: false,
+      canComplete: true,
+    }))
+    await wrapper.get('[data-testid="complete-task"]').trigger('click')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('填写实际耗时')
+    await wrapper.get('[data-testid="actual-minutes"]').setValue('30')
+    await wrapper.get('[data-testid="confirm-complete"]').trigger('click')
+
+    await vi.waitFor(() => expect(wrapper.get('[role="dialog"]').text())
+      .toContain('状态已被其他管理员更新'))
+    expect(wrapper.find('[data-testid="actual-minutes"]').exists()).toBe(true)
+  })
+it('shows no operational actions after completion', () => {
     const wrapper = mountActions(task({
       status: 'COMPLETED',
       canCall: false,
