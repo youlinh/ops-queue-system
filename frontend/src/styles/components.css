@@ -188,8 +188,7 @@
   pointer-events: auto;
 }
 
-.notification-live-dot,
-.notification-dot {
+.notification-live-dot {
   width: var(--ui-space-2);
   height: var(--ui-space-2);
   margin-top: var(--ui-space-2);
