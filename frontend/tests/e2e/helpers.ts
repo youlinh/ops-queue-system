@@ -1,4 +1,10 @@
-import { expect, request, type Browser, type Page } from '@playwright/test'
+import {
+  expect,
+  request,
+  type Browser,
+  type BrowserContextOptions,
+  type Page,
+} from '@playwright/test'
 import ExcelJS from 'exceljs'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -48,8 +54,10 @@ export async function login(
 export async function rolePage(
   browser: Browser,
   user: E2eUser,
+  options: BrowserContextOptions = {},
 ): Promise<{ context: Awaited<ReturnType<Browser['newContext']>>; page: Page }> {
   const context = await browser.newContext({
+    ...options,
     storageState: storageStatePath(user),
   })
   return { context, page: await context.newPage() }
