@@ -26,6 +26,8 @@ describe('Apple Design token contract', () => {
   it('retains legacy selectors until their consuming templates migrate', () => {
     expect(base).toContain("@import './legacy.css';")
     expect(legacy).toContain('var(--ui-ground)')
+    expect(tokens).not.toContain('--ui-legacy-color-')
+    expect(legacy).not.toContain('var(--ui-legacy-color-')
     expect(legacy).not.toMatch(/var\(--(?:navy|navy-soft|blue|cyan|line|muted|surface)\)/)
     expect(legacy).not.toMatch(/#[0-9a-fA-F]{3,6}\b/)
     expect(legacy).not.toMatch(/rgba?\(/)
