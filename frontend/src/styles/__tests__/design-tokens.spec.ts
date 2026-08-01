@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const tokens = readFileSync(resolve(process.cwd(), 'src/styles/tokens.css'), 'utf8')
 const base = readFileSync(resolve(process.cwd(), 'src/styles/base.css'), 'utf8')
+const legacy = readFileSync(resolve(process.cwd(), 'src/styles/legacy.css'), 'utf8')
 
 describe('Apple Design token contract', () => {
   it('defines the approved color, type, radius, shadow, and motion values', () => {
@@ -20,5 +21,17 @@ describe('Apple Design token contract', () => {
     expect(base).toContain('@media (prefers-reduced-motion: reduce)')
     expect(base).toContain('@media (prefers-reduced-transparency: reduce)')
     expect(base).toContain('@media (prefers-contrast: more)')
+  })
+
+  it('retains legacy selectors until their consuming templates migrate', () => {
+    expect(base).toContain("@import './legacy.css';")
+    expect(legacy).toContain('var(--ui-ground)')
+    expect(legacy).not.toMatch(/var\(--(?:navy|navy-soft|blue|cyan|line|muted|surface)\)/)
+    expect(legacy).not.toMatch(/#[0-9a-fA-F]{3,6}\b/)
+    expect(legacy).not.toMatch(/rgba?\(/)
+    expect(legacy).toContain('.auth-page')
+    expect(legacy).toContain('.task-filters')
+    expect(legacy).toContain('.dialog-backdrop')
+    expect(legacy).toContain('.notification-toast')
   })
 })
