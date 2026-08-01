@@ -19,6 +19,15 @@ describe('route authorization', () => {
     expect(detail.meta?.taskSheet).toBe(true)
   })
 
+  it('keeps dedicated 403 and 404 recovery routes', () => {
+    const shell = routes.find(route => route.path === '/')!
+    expect(shell.children?.some(route => route.path === '403')).toBe(true)
+    expect(shell.children?.some(route => route.path === '404')).toBe(true)
+    expect(routes.at(-1)).toMatchObject({
+      path: '/:pathMatch(.*)*',
+      redirect: '/404',
+    })
+  })
   it('preserves a protected destination through login', () => {
     expect(decideNavigation(
       { path: '/tasks', fullPath: '/tasks?status=PENDING', meta: {} },

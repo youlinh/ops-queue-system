@@ -4,6 +4,7 @@ import AppLayout from '@/layout/AppLayout.vue'
 import ChangePasswordPage from '@/features/auth/ChangePasswordPage.vue'
 import LoginPage from '@/features/auth/LoginPage.vue'
 import ForbiddenPage from '@/pages/ForbiddenPage.vue'
+import NotFoundPage from '@/pages/NotFoundPage.vue'
 import PlaceholderPage from '@/pages/PlaceholderPage.vue'
 import TaskCreatePage from '@/features/tasks/TaskCreatePage.vue'
 import TaskQueuePage from '@/features/tasks/TaskQueuePage.vue'
@@ -147,9 +148,14 @@ export const routes: RouteRecordRaw[] = [
         component: ForbiddenPage,
         meta: { title: '无权限' },
       },
+      {
+        path: '404',
+        component: NotFoundPage,
+        meta: { title: '页面未找到' },
+      },
     ],
   },
-  { path: '/:pathMatch(.*)*', redirect: '/workspace' },
+  { path: '/:pathMatch(.*)*', redirect: '/404' },
 ]
 
 export const router = createRouter({

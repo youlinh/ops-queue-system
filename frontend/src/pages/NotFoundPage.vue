@@ -1,12 +1,8 @@
-<script setup lang="ts">
-defineProps<{ title: string }>()
-</script>
-
 <template>
   <section class="recovery-page ui-panel">
-    <p class="eyebrow">MODULE</p>
-    <h1>{{ title }}</h1>
-    <p>该模块暂未开放，请返回工作台继续处理当前任务。</p>
+    <p class="eyebrow">404 · PAGE NOT FOUND</p>
+    <h1>页面未找到</h1>
+    <p>你访问的地址不存在，或已被移动。</p>
     <RouterLink class="inline-link" to="/workspace">返回工作台</RouterLink>
   </section>
 </template>
