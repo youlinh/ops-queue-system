@@ -2,7 +2,6 @@
 import { apiErrorMessage } from '@/app/http'
 import { useAuthStore } from '@/features/auth/auth.store'
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
 import { listOperators, taskDetail } from './task.api'
 import TaskActions from './TaskActions.vue'
 import {
@@ -13,14 +12,14 @@ import {
   type TaskDetail,
 } from './task.types'
 
-const route = useRoute()
+const props = defineProps<{ taskId: string }>()
 const auth = useAuthStore()
 const task = ref<TaskDetail | null>(null)
 const operators = ref<OperatorOption[]>([])
 const loading = ref(false)
 const errorMessage = ref('')
 const operatorError = ref('')
-const id = computed(() => String(route.params.id))
+const id = computed(() => props.taskId)
 let requestSequence = 0
 
 function formatDateTime(value: string | null): string {
@@ -102,6 +101,9 @@ watch(id, load)
   </section>
   <section v-else-if="errorMessage" class="content-panel">
     <p class="form-error" role="alert">{{ errorMessage }}</p>
+    <button class="text-button" type="button" data-testid="retry-task-detail" @click="load">
+      重试
+    </button>
   </section>
   <div v-else-if="task" class="task-detail-layout">
     <section class="content-panel detail-main">

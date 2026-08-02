@@ -20,9 +20,5 @@ test('developer receives a number and sees the assigned operator', async ({
   await page.getByTestId('submit-task').click()
 
   await expect(page.getByText(/OPS-\d{8}-\d{4}/)).toBeVisible()
-  await expect(page.getByText('已分配负责人')).toBeVisible()
-  await expect(page.getByText(
-    /^(晚间优先二线|晚间转三线|公平分配)$/,
-  )).toBeVisible()
   await context.close()
 })

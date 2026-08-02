@@ -2,6 +2,8 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { Role } from '@/features/auth/auth.types'
 import RoleNavigation from '../RoleNavigation.vue'
+import roleNavigationSource from '../RoleNavigation.vue?raw'
+import { mobileNavigationFor } from '../navigation'
 
 describe('RoleNavigation', () => {
   it.each([
@@ -37,5 +39,21 @@ describe('RoleNavigation', () => {
       '审计日志',
     ])
     expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('maps leader navigation to three direct items and More overflow', () => {
+    const result = mobileNavigationFor(['LEADER'])
+    expect(result.primary.map(item => item.to)).toEqual(['/workspace', '/tasks', '/people'])
+    expect(result.overflow.map(item => item.to)).toEqual(['/rosters', '/reports', '/audit'])
+  })
+
+  it('gives combined roles the developer create action before leader actions', () => {
+    const result = mobileNavigationFor(['DEVELOPER', 'OPERATOR', 'LEADER'])
+    expect(result.primary.map(item => item.to)).toEqual(['/workspace', '/tasks', '/tasks/new'])
+    expect(result.overflow.map(item => item.to)).toEqual(['/rosters', '/people', '/reports', '/audit'])
+  })
+
+  it('resets mobile navigation padding and gap before reserving the safe area', () => {
+    expect(roleNavigationSource).toMatch(/\.role-navigation--mobile\s*\{[^}]*padding:\s*0;[^}]*gap:\s*0;[^}]*padding-bottom:\s*env\(safe-area-inset-bottom\);/s)
   })
 })

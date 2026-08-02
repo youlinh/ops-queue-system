@@ -122,8 +122,9 @@ onUnmounted(() => {
         :key="toast.id"
         class="notification-toast"
         role="status"
+        :aria-label="toast.title"
       >
-        <span class="notification-dot" />
+        <i class="notification-live-dot" aria-hidden="true" />
         <div class="notification-body">
           <strong>{{ toast.title }}</strong>
           <span v-if="toast.detail">{{ toast.detail }}</span>

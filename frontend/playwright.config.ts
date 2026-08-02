@@ -20,7 +20,12 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Keep desktop acceptance stable while individual specs create their
+        // own mobile contexts through rolePage.
+        viewport: { width: 1440, height: 900 },
+      },
       dependencies: ['setup'],
       testIgnore: /auth\.setup\.ts/,
     },

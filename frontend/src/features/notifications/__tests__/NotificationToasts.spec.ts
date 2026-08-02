@@ -43,6 +43,7 @@ describe('NotificationToasts', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   it('polls after the initial delay and renders claimed events', async () => {
@@ -90,6 +91,28 @@ describe('NotificationToasts', () => {
 
     await wrapper.get('button[aria-label="关闭提醒"]').trigger('click')
     expect(wrapper.text()).not.toContain('OPS-9')
+    wrapper.unmount()
+  })
+
+  it('exposes status semantics and auto-dismisses even when reduced motion is preferred', async () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })))
+    claimNotifications.mockResolvedValueOnce([claimed('n-reduced', 'OPS-REDUCED')])
+    const wrapper = mountToasts({ initialDelayMs: 1000, pollIntervalMs: 5000, dismissAfterMs: 3000 })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    await flushPromises()
+
+    const toast = wrapper.get('[role="status"]')
+    expect(toast.attributes('aria-label')).toContain('OPS-REDUCED')
+    expect(wrapper.find('button[aria-label]').exists()).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

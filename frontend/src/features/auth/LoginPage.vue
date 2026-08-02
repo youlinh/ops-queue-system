@@ -51,58 +51,108 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <main class="auth-page">
-    <section class="auth-brand" aria-label="系统介绍">
-      <div class="brand-mark brand-mark--large">OPS</div>
-      <p class="eyebrow">RELEASE &amp; DATA OPERATIONS</p>
-      <h1>运维叫号台</h1>
-      <p class="brand-lead">
-        让版本发布与数据维护任务有序进入队列，清楚分派，完整留痕。
+  <main class="auth-layout">
+    <form class="auth-surface ui-panel" @submit.prevent="submit">
+      <div class="brand-mark auth-surface__mark" aria-hidden="true">OPS</div>
+      <p class="eyebrow">OPS QUEUE SYSTEM</p>
+      <h1>登录运维叫号台</h1>
+      <p class="page-summary">
+        进入任务队列，查看分派并完成操作留痕。
       </p>
-      <div class="brand-rule" />
-      <p class="brand-note">统一取号 · 智能分派 · 全程可追溯</p>
-    </section>
 
-    <section class="auth-panel">
-      <form class="auth-card" @submit.prevent="submit">
-        <p class="eyebrow">WELCOME BACK</p>
-        <h2>登录系统</h2>
-        <p class="muted">使用组长为你创建的本地账号登录</p>
+      <label class="ui-field-group">
+        <span class="ui-field-label">账号</span>
+        <input
+          v-model="form.username"
+          class="ui-field-control"
+          name="username"
+          autocomplete="username"
+          maxlength="64"
+          placeholder="请输入账号"
+          autofocus
+        />
+      </label>
+      <label class="ui-field-group">
+        <span class="ui-field-label">密码</span>
+        <input
+          v-model="form.password"
+          class="ui-field-control"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="请输入密码"
+        />
+      </label>
 
-        <label class="field">
-          <span>账号</span>
-          <input
-            v-model="form.username"
-            name="username"
-            autocomplete="username"
-            maxlength="64"
-            placeholder="请输入账号"
-            autofocus
-          />
-        </label>
-        <label class="field">
-          <span>密码</span>
-          <input
-            v-model="form.password"
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            placeholder="请输入密码"
-          />
-        </label>
-
-        <p v-if="errorMessage" class="form-error" role="alert">
-          {{ errorMessage }}
-        </p>
-        <button
-          class="primary-button"
-          type="submit"
-          :disabled="!canSubmit || submitting"
-        >
-          {{ submitting ? '正在登录…' : '登录' }}
-        </button>
-        <p class="auth-help">如需重置密码，请联系任一运维组长。</p>
-      </form>
-    </section>
+      <p v-if="errorMessage" class="auth-error" role="alert">
+        {{ errorMessage }}
+      </p>
+      <button
+        class="ui-button ui-button--primary auth-submit"
+        type="submit"
+        :disabled="!canSubmit || submitting"
+      >
+        {{ submitting ? '正在登录…' : '登录' }}
+      </button>
+      <p class="auth-help">如需重置密码，请联系任一运维组长。</p>
+    </form>
   </main>
 </template>
+
+<style scoped>
+.auth-layout {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: var(--ui-space-6);
+  background: var(--ui-ground);
+}
+
+.auth-surface {
+  width: min(100%, 440px);
+  padding: clamp(var(--ui-space-6), 5vw, 44px);
+}
+
+.auth-surface__mark {
+  margin-bottom: var(--ui-space-5);
+  border-color: var(--ui-hairline);
+  border-radius: var(--ui-radius-small);
+}
+
+h1 {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  letter-spacing: -.03em;
+}
+
+.page-summary {
+  margin: var(--ui-space-3) 0 var(--ui-space-6);
+  color: var(--ui-text-body);
+  line-height: 1.6;
+}
+
+.auth-error {
+  margin: var(--ui-space-4) 0 0;
+  color: var(--ui-attention);
+  font-size: .875rem;
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: var(--ui-space-5);
+}
+
+.auth-submit:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.auth-help {
+  margin: var(--ui-space-4) 0 0;
+  color: var(--ui-text-secondary);
+  font-size: .8125rem;
+  line-height: 1.5;
+  text-align: center;
+}
+</style>

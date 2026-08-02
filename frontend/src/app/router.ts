@@ -4,10 +4,11 @@ import AppLayout from '@/layout/AppLayout.vue'
 import ChangePasswordPage from '@/features/auth/ChangePasswordPage.vue'
 import LoginPage from '@/features/auth/LoginPage.vue'
 import ForbiddenPage from '@/pages/ForbiddenPage.vue'
+import NotFoundPage from '@/pages/NotFoundPage.vue'
 import PlaceholderPage from '@/pages/PlaceholderPage.vue'
 import TaskCreatePage from '@/features/tasks/TaskCreatePage.vue'
-import TaskDetailPage from '@/features/tasks/TaskDetailPage.vue'
 import TaskQueuePage from '@/features/tasks/TaskQueuePage.vue'
+import WorkspacePage from '@/features/workspace/WorkspacePage.vue'
 import RosterImportPage from '@/features/roster/RosterImportPage.vue'
 import PeoplePage from '@/features/people/PeoplePage.vue'
 import ReportingPage from '@/features/reporting/ReportingPage.vue'
@@ -24,6 +25,7 @@ declare module 'vue-router' {
     public?: boolean
     roles?: Role[]
     title?: string
+    taskSheet?: boolean
   }
 }
 
@@ -90,8 +92,7 @@ export const routes: RouteRecordRaw[] = [
       { path: '', redirect: '/workspace' },
       {
         path: 'workspace',
-        component: TaskQueuePage,
-        props: { dashboard: true },
+        component: WorkspacePage,
         meta: {
           title: '工作台',
           roles: ['DEVELOPER', 'OPERATOR', 'LEADER'],
@@ -104,6 +105,7 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: 'tasks',
+        name: 'tasks',
         component: TaskQueuePage,
         meta: {
           title: '任务中心',
@@ -112,8 +114,11 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: 'tasks/:id',
-        component: TaskDetailPage,
+        name: 'task-detail',
+        component: TaskQueuePage,
+        props: { dashboard: false },
         meta: {
+          taskSheet: true,
           title: '任务详情',
           roles: ['DEVELOPER', 'OPERATOR', 'LEADER'],
         },
@@ -143,9 +148,14 @@ export const routes: RouteRecordRaw[] = [
         component: ForbiddenPage,
         meta: { title: '无权限' },
       },
+      {
+        path: '404',
+        component: NotFoundPage,
+        meta: { title: '页面未找到' },
+      },
     ],
   },
-  { path: '/:pathMatch(.*)*', redirect: '/workspace' },
+  { path: '/:pathMatch(.*)*', redirect: '/404' },
 ]
 
 export const router = createRouter({
