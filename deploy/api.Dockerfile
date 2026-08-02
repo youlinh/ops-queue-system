@@ -1,10 +1,11 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /src
+COPY deploy/maven-settings.xml settings.xml
 COPY backend/pom.xml .
 # Cached layer: source edits no longer re-download every dependency.
-RUN mvn -q -DskipTests dependency:go-offline
+RUN mvn -q -s settings.xml -DskipTests dependency:go-offline
 COPY backend/src ./src
-RUN mvn -DskipTests package
+RUN mvn -s settings.xml -DskipTests package
 
 FROM eclipse-temurin:21-jre-jammy
 RUN apt-get update \

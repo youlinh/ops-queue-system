@@ -156,11 +156,12 @@ a {
 .field textarea {
   width: 100%;
   padding: 0 14px;
-  border: 1px solid var(--ui-hover);
+  border: 1px solid color-mix(in srgb, var(--ui-text) 16%, transparent);
   border-radius: var(--ui-radius-small);
   outline: none;
   color: var(--ui-text);
-  background: var(--ui-surface);
+  background: var(--ui-hover);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ui-surface) 72%, transparent);
   transition: border-color .15s, box-shadow .15s;
 }
 
@@ -177,10 +178,25 @@ a {
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  border-color: var(--ui-text-secondary);
-  box-shadow: 0 0 0 3px var(--ui-accent);
+  border-color: var(--ui-accent-link);
+  background: var(--ui-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-accent) 18%, transparent);
 }
 
+
+.field > span,
+.role-options legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field > span svg,
+.role-options legend svg {
+  width: 16px;
+  height: 16px;
+  color: var(--ui-accent-link);
+}
 .form-error {
   margin: 16px 0 -4px;
   color: var(--ui-attention);
@@ -240,8 +256,14 @@ a {
 }
 
 .sidebar-brand .brand-mark {
-  border-color: var(--ui-text-secondary);
+  border-color: color-mix(in srgb, var(--ui-surface) 16%, transparent);
+  color: var(--ui-text);
   background: var(--ui-surface);
+}
+
+.sidebar-brand .brand-mark svg {
+  width: 22px;
+  height: 22px;
 }
 
 .sidebar-brand strong,
@@ -665,7 +687,7 @@ a {
 
 .task-filters {
   display: grid;
-  grid-template-columns: 155px 150px 150px minmax(150px, 1fr) auto auto;
+  grid-template-columns: 1fr;
   gap: 12px;
   align-items: end;
   padding: 20px 28px;
@@ -1319,7 +1341,7 @@ a {
   }
 
   .task-filters {
-    grid-template-columns: repeat(3, minmax(140px, 1fr));
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1435,7 +1457,7 @@ a {
   }
 
   .task-filters {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .filter-system {

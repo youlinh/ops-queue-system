@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/app/http'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import type { Role } from '@/features/auth/auth.types'
 import { shanghaiDate } from '@/features/tasks/shanghai-time'
 import { onMounted, reactive, ref } from 'vue'
@@ -161,15 +162,15 @@ onMounted(load)
       </div>
       <div class="form-grid">
         <label class="field">
-          <span>登录账号</span>
+          <span><AppIcon name="people" decorative />登录账号</span>
           <input v-model="form.username" maxlength="64" autocomplete="off" />
         </label>
         <label class="field">
-          <span>姓名</span>
+          <span><AppIcon name="people" decorative />姓名</span>
           <input v-model="form.displayName" maxlength="128" />
         </label>
         <label class="field">
-          <span>初始密码</span>
+          <span><AppIcon name="key" decorative />初始密码</span>
           <input
             v-model="form.initialPassword"
             type="password"
@@ -179,14 +180,14 @@ onMounted(load)
           />
         </label>
         <fieldset class="role-options">
-          <legend>角色</legend>
+          <legend><AppIcon name="people" decorative />角色</legend>
           <label v-for="role in allRoles" :key="role">
             <input v-model="form.roles" type="checkbox" :value="role" />
             {{ roleLabels[role] }}
           </label>
         </fieldset>
       </div>
-      <button class="ui-button ui-button--primary compact-button" type="submit">
+      <button class="ui-button ui-button--primary compact-button" type="submit"><AppIcon name="create" decorative />
         创建账号
       </button>
     </form>

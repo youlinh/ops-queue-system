@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Container builds route all Maven downloads through the Aliyun mirror,
+     which is fast and reliable from mainland-China networks. To fall back to
+     Maven Central, drop the "-s settings.xml" flags in api.Dockerfile. -->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+  <mirrors>
+    <mirror>
+      <id>aliyun-public</id>
+      <name>Aliyun mirror of Maven Central</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <mirrorOf>*</mirrorOf>
+    </mirror>
+  </mirrors>
+</settings>

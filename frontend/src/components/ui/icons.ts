@@ -1,6 +1,7 @@
 export type AppIconName =
   | 'workspace' | 'create' | 'tasks' | 'roster'
   | 'people' | 'reports' | 'audit' | 'more' | 'close'
+  | 'filter' | 'search' | 'refresh' | 'key'
 
 export const iconPaths: Record<AppIconName, readonly string[]> = {
   workspace: ['M4 13h6V4H4z', 'M14 20h6v-9h-6z', 'M4 20h6v-3H4z', 'M14 7h6V4h-6z'],
@@ -12,4 +13,8 @@ export const iconPaths: Record<AppIconName, readonly string[]> = {
   audit: ['M6 3h12v18H6z', 'M9 8h6', 'M9 12h6', 'M9 16h4'],
   more: ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'],
   close: ['M6 6l12 12', 'M18 6L6 18'],
+  filter: ['M4 5h16l-6.5 7.5v5l-3 1.5v-6.5z'],
+  search: ['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M16.5 16.5L21 21'],
+  refresh: ['M20 11a8 8 0 0 0-14.9-4L3 10', 'M3 5v5h5', 'M4 13a8 8 0 0 0 14.9 4L21 14', 'M21 19v-5h-5'],
+  key: ['M14.5 9.5a4.5 4.5 0 1 0-8.9 1.2A4.5 4.5 0 0 0 10 15.5h2v2h2v-2h2v-2h-5.5']
 }

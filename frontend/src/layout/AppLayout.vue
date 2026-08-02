@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/app/http'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useAuthStore } from '@/features/auth/auth.store'
 import type { Role } from '@/features/auth/auth.types'
 import { shanghaiDate } from '@/features/tasks/shanghai-time'
@@ -90,7 +91,7 @@ async function signOut(): Promise<void> {
   <div class="app-shell">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark">OPS</div>
+        <div class="brand-mark" aria-hidden="true"><AppIcon name="workspace" decorative /></div>
         <div>
           <strong>运维叫号台</strong>
           <span>任务协同中心</span>
